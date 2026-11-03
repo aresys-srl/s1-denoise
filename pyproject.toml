@@ -8,14 +8,11 @@ readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Operating System :: POSIX :: Linux",
+    "Operating System :: OS Independent",
 ]
 dynamic = ["version"]
 license = { file = "LICENSE" }
 dependencies = [
-    # private wheels - installed separately by install.sh:
-    #   arepytools
-    #   arepyextras-eo-products
     "click",
     "colorlog",
     "lxml",
@@ -24,8 +21,10 @@ dependencies = [
     "Pillow",
     "rasterio",
     "scipy",
+    "sentinel1decoder",
     "tabulate",
     "xmltodict",
+    "perseo-core"
 ]
 
 [project.scripts]
@@ -41,5 +40,11 @@ path = "denoise/__init__.py"
 [tool.hatch.build.targets.wheel]
 packages = ["denoise"]
 
-[tool.hatch.build.targets.wheel.include]
-patterns = ["denoise/aux_rules/**"]
+[tool.hatch.build.targets.sdist]
+include = [
+    "denoise/**/*.py",
+    "README.md",
+    "LICENSE",
+    "pyproject.toml",
+    "scripts/compare_noise.py"
+]

@@ -16,7 +16,7 @@ import numpy as np
 import copy
 from scipy.interpolate import interp1d
 
-from arepytools.timing.precisedatetime import PreciseDateTime
+from perseo_core.timing import PreciseDateTime
 
 from denoise.utils import iso_to_datetime, get_range_boundaries, ensure_list
 from denoise.logger import denoise_logger

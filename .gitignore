@@ -1,22 +1,26 @@
+# Python
 __pycache__/
+.venv/
+dist/
+
+# Editor / tool config
 .cache/
 .config/
 .vscode/
-.venv
-*.SAFE
-*.csv
-*.out
-*.log
+
+# Archives & logs
 *.tar
 *.xz
 *.gz
+*.log
+*.out
+*.csv
 *.png
-dist/
-test-data/
-input-for-denoise*/
-analysis-graphs*/
-profiles*/
+
+# Sentinel-1 data & products
+*.SAFE
+job-orders/*
+
+# Pipeline output
 output/
-tmp_s1l0/
-JobOrder*
-input*
+compare-noise-plots/

@@ -12,7 +12,7 @@ outlier removal for noise pulse outlier detection in noise power series, and lis
 import numpy as np
 from scipy.constants import speed_of_light
 
-from arepytools.timing.precisedatetime import PreciseDateTime
+from perseo_core.timing import PreciseDateTime
 
 from denoise.__init__ import OUTLIER_DETECTION_CONSTANT
 

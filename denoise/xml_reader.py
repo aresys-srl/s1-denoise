@@ -15,9 +15,8 @@ import numpy as np
 import xml.etree.ElementTree as ET
 import xmltodict
 from scipy.constants import speed_of_light
-
-from arepytools.timing.precisedatetime import PreciseDateTime
-from arepytools.geometry.generalsarorbit import GeneralSarOrbit
+from perseo_core.timing import PreciseDateTime
+from perseo_core.geometry.navigation import CubicSplineTrajectory
 
 from denoise.utils import ground2slant, ensure_list, get_range_boundaries
 from denoise.logger import denoise_logger
@@ -238,10 +237,10 @@ def angles2freq_conversion(metadata_dict, az_t):
 
     fc_hz = float(metadata_dict['product']['generalAnnotation']['productInformation']['radarFrequency'])
 
-    date_time_vec, positions = extract_info_orbita(metadata_dict)
+    date_time_vec, positions, velocities = extract_info_orbita(metadata_dict)
     # Generate the orbit object from times and positions
-    GSO_orbit = GeneralSarOrbit(date_time_vec, positions.ravel(order='F'))
-    velocity = np.linalg.norm(GSO_orbit.get_velocity(az_t))
+    orbit = CubicSplineTrajectory(times=date_time_vec, positions=positions, velocities=velocities)
+    velocity = np.linalg.norm(orbit.velocity(az_t))
     
     return 2 * velocity / (speed_of_light / fc_hz)
 
@@ -336,16 +335,19 @@ def extract_info_orbita(metadata_dict):
 
     data_orbita = metadata_dict['product']['generalAnnotation']['orbitList']['orbit']
     
-    times, x, y, z = [], [], [], []
+    times, x, y, z, vx, vy, vz = [], [], [], [], [], [], []
     for element  in data_orbita:
         times.append(element['time'])
         x.append(float(element['position']['x']))
         y.append(float(element['position']['y']))
         z.append(float(element['position']['z']))
+        vx.append(float(element['velocity']['x']))
+        vy.append(float(element['velocity']['y']))
+        vz.append(float(element['velocity']['z']))
 
     # Convert times
     date_time_vec = np.ndarray((len(times),), dtype=PreciseDateTime)
     for idx, date in enumerate(times):
         date_time_vec[idx] = PreciseDateTime.from_utc_string(date)
 
-    return np.array(date_time_vec), np.array([x, y, z])
+    return np.array(date_time_vec), np.c_[x, y, z], np.c_[vx, vy, vz]

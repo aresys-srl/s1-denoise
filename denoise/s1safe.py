@@ -19,7 +19,7 @@ import numpy as np
 import rasterio
 from rasterio.windows import Window
 
-from arepytools.timing.precisedatetime import PreciseDateTime
+from perseo_core.timing import PreciseDateTime
 
 _subswaths = {'EW': ('EW1', 'EW2', 'EW3', 'EW4', 'EW5'),
               'IW': ('IW1', 'IW2', 'IW3'),

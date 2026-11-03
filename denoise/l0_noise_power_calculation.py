@@ -4,61 +4,35 @@
 """
 Module for extracting noise power estimates from Sentinel-1 L0N raw data.
 
-Invokes the Sentinel1L0ImportQC tool to convert L0N products into a temporary
-product folder, then computes per-channel mean noise power in dB by grouping
-echoes according to mission-specific rank sequences (IW/EW, S1A/B/C/D). Exposes
-the result as a dictionary keyed by (subswath, polarisation).
+Reads the L0N SAFE product's raw packets directly, one noise sample per 
+instrument burst: literal NOISE-signal packets where present (BAQ 5-bit), or
+else the burst's first rank echo packets (FDBAQ, decoded natively).
+
+Per-burst samples are then filtered per mission-specific rank sequences
+(IW/EW, S1A/B/C/D).
 """
 
-import os
-import numpy as np
-import subprocess
-import tempfile
-from pathlib import Path
-import re
 import sys
+from pathlib import Path
 
-from arepytools.timing.precisedatetime import PreciseDateTime
-from arepytools.io import open_product_folder, read_metadata, read_raster_with_raster_info
+import numpy as np
+import sentinel1decoder as s1decoder
+from sentinel1decoder import BaqMode, ECCNumber, RxChannelId, SignalType
 
+from perseo_core.timing import PreciseDateTime
+
+from denoise.baq_decoder import decode_baq_packet, quads_to_complex
 from denoise.logger import denoise_logger
 
-# Precompute groups
-EW = [[1, 6], [2, 7], [3, 8], [4, 9], [5, 10]]
-IW = [[1, 4, 7, 10], [2, 5, 8], [3, 6, 9]]
+# Seconds between the GPS time epoch (1980-01-06T00:00:00) used by the "Coarse Time"/"Fine Time" packet fields and PreciseDateTime's own epoch (1985-01-01T00:00:00 UTC).
+_GPS_EPOCH_TO_PRECISEDATETIME_EPOCH_SEC = 157420800.0
+# GPS-UTC leap second offset. Constant since the last leap second insertion on 2016-12-31; would need bumping if IERS schedules a new one.
+_GPS_UTC_LEAP_SECONDS = 18
 
-# Rank mapping
-NRANK_MAP = {
-    "EW": {
-        0: 8, 
-        1: 10, 
-        2: 9, 
-        3: 11, 
-        4: 10
-    },
-    "IW": {
-        0: 9, 
-        1: 8, 
-        2: 10
-    }
-}
-
-# Combined lookup
-GROUPS = {"IW": IW, "EW": EW}
-
-def get_nrank(swath, channel_id):
-    """Return nrank based on swath type and channel ID."""
-    key = "IW" if "IW" in swath else "EW" if "EW" in swath else None
-    if not key:
-        return None
-    for idx, group in enumerate(GROUPS[key]):
-        if channel_id in group:
-            return NRANK_MAP[key].get(idx)
-    return None
 
 def iq_bias_correction(raw_data):
     """Raw data correction removing constant biases, correcting gain imbalance and non-orthogonality for both components of the signal.
-    For Sentinel-1 data, however, the instrument's receive module performs the demodulation in the digital domain, therefore the I/Q gain 
+    For Sentinel-1 data, however, the instrument's receive module performs the demodulation in the digital domain, therefore the I/Q gain
     imbalance and I/Q non-orthogonality corrections are not necessary."""
 
     i_values = raw_data.real
@@ -72,84 +46,95 @@ def iq_bias_correction(raw_data):
 
     return corrected_data
 
-def compute_sequence(array, nrank, mission_id, subswath, rank_echoes_present):
-    """Compute the sequence, rank, and noise arrays."""
 
-    rank_echoes = []
-    ARRAY_IS_TIME = isinstance(array[0], PreciseDateTime)
+def _packet_time(coarse_time, fine_time) -> PreciseDateTime:
+    sec85 = float(coarse_time) + float(fine_time) - _GPS_EPOCH_TO_PRECISEDATETIME_EPOCH_SEC - _GPS_UTC_LEAP_SECONDS
+    return PreciseDateTime.from_sec85(sec85)
 
-    if mission_id.upper() in ["S1A", "S1B"]:
-        step = nrank
-    elif mission_id.upper() in ["S1C", "S1D"]:
-        if subswath.startswith("IW"):
-            step = 8 + (2 * nrank if rank_echoes_present else 0)
-        elif subswath.startswith("EW"):
-            step = 3 + (nrank if rank_echoes_present else 0)
-    else:
-        denoise_logger.error("Mission ID unknown in noise power calculation. Aborting...")
-        sys.exit(128)
 
-    # append preamble power
-    preamble = array[0] if ARRAY_IS_TIME else np.mean(array[0:8])
-    rank_echoes.append(preamble)
+def _subswath_name(ecc_number, swath_num):
+    """Map (ECC Number, Swath Number) to a subswath label, e.g. 'IW1', 'EW3', etc."""
 
-    acquisition = array[8:-8] # filter out preamble and postamble
+    if ecc_number == ECCNumber.INTERFEROMETRIC_WIDE_SWATH:
+        return f"IW{swath_num - 9}"
+    if ecc_number == ECCNumber.EXTRA_WIDE_SWATH:
+        return f"EW{swath_num - 19}"
+    return None
 
-    for index in range(int(len(acquisition) / step)):
-        segment = acquisition[step*index : step*(index+1)]
 
-        if rank_echoes_present and mission_id.upper() in ["S1C", "S1D"]:        
-            if ARRAY_IS_TIME:
-                rank_echoes.append(segment[0])
-                rank_echoes.append(segment[nrank])
-                rank_echoes.append(segment[2*nrank])
-            else:
-                rank_echoes.append(np.mean(segment[0 : nrank]))
-                rank_echoes.append(np.mean(segment[nrank : 2*nrank]))
-                rank_echoes.append(np.mean(segment[2*nrank :]))
-        else:
-            if ARRAY_IS_TIME:
-                rank_echoes.append(segment[0])
-            else:
-                rank_echoes.append(np.mean(segment[0 : step]))
+def _polarization_label(polarisation, rx_channel_id):
 
-    # append postamble power
-    postamble = array[-8] if ARRAY_IS_TIME else np.mean(array[-8:])
-    rank_echoes.append(postamble)
+    tx = "H" if "TX_H" in polarisation.name else "V"
+    rx = "H" if rx_channel_id == RxChannelId.RXH_POL_CHANNEL else "V"
 
-    return rank_echoes
+    return tx + rx
 
-def calculate_noise_db(pf_path, mission_id, rank_echoes_present):
 
-    pf = open_product_folder(pf_path)
+def _channel_lines(dat_path: Path):
+    """For one L0N .dat file, build one noise-power sample per natural burst for every (subswath, pol) channel"""
 
-    noise = {}
+    l0 = s1decoder.Level0File(str(dat_path))
+    bounds = l0._decoder._user_data_bounds
 
-    for channel_id in pf.get_channels_list():
-        metadata = read_metadata(pf.get_channel_metadata(channel_id))
-        raster_info = metadata.get_raster_info()
-        swath_info = metadata.get_swath_info()
-        subswath = swath_info.swath
-        pol = swath_info.polarization.name.upper()
+    # group chunks per (subswath, pol)
+    channels = {}
+    with open(dat_path, "rb") as fh:
+        for chunk_id in l0.acquisition_chunks:
+            const = l0.get_acquisition_chunk_constants(chunk_id)
+            if const["signal_type"] not in (SignalType.NOISE, SignalType.ECHO):
+                continue
+            chunk_meta = l0.get_acquisition_chunk_metadata(chunk_id)
+            subswath = _subswath_name(chunk_meta["ECC Number"].iloc[0], const["swath_num"])
+            if subswath is None:
+                continue
+            pol = _polarization_label(chunk_meta["Polarisation"].iloc[0], chunk_meta["Rx Channel ID"].iloc[0])
+            key = (subswath, pol)
+            channels.setdefault(key, {"lines": [], "times": [], "burst_sizes": [], "_chunks": []})
+            channels[key]["_chunks"].append((chunk_id, const, chunk_meta))
 
-        data = read_raster_with_raster_info(pf.get_channel_data(channel_id), raster_info)
-        corrected_data = iq_bias_correction(data)
+        for key, data in channels.items():
+            for chunk_id, const, chunk_meta in sorted(data["_chunks"], key=lambda x: x[0]):
+                if const["signal_type"] == SignalType.NOISE:
+                    if const["baq_mode"] != BaqMode.BAQ_5_BIT_MODE:
+                        raise NotImplementedError(f"Unsupported BAQ mode for NOISE packets in {key}: {const['baq_mode']}")
+                    burst_meta = chunk_meta
+                    burst_lines = []
+                    for packet_num, num_quads in zip(
+                        burst_meta.index.get_level_values("Packet Number"), burst_meta["Number of Quads"].astype(int)
+                    ):
+                        start, length = bounds[packet_num]
+                        fh.seek(start)
+                        raw = fh.read(length)
+                        IE, IO, QE, QO = decode_baq_packet(raw, num_quads, code_bits=5)
+                        burst_lines.append(quads_to_complex(IE, IO, QE, QO))
+                else:
+                    rank = int(chunk_meta["Rank"].iloc[0])
+                    burst_meta = chunk_meta.iloc[:rank]
+                    decoded = l0.get_acquisition_chunk_data(chunk_id, try_load_from_file=False)
+                    burst_lines = list(decoded[: len(burst_meta)])
 
-        az_time = [metadata.get_swath_info().acquisition_start_time + time_ 
-                   for time_ in metadata.get_acquisition_time_line().noise_packet[1]]
+                data["lines"].extend(burst_lines)
+                data["times"].extend(_packet_time(c, f) for c, f in zip(burst_meta["Coarse Time"], burst_meta["Fine Time"]))
+                data["burst_sizes"].append(len(burst_lines))
 
-        gain_lin = np.abs(corrected_data)
-        power_lin = gain_lin ** 2
-        power_mean = np.nanmean(power_lin, axis=1)
+            del data["_chunks"]
 
-        nrank = get_nrank(subswath, channel_id)
-        if nrank is None:
-            continue # skip unknown swath/channel combos
+    return channels
 
-        rank_db = compute_sequence(power_mean, nrank, mission_id, subswath, rank_echoes_present)
-        az_time = compute_sequence(az_time, nrank, mission_id, subswath, rank_echoes_present)
 
-        ######################## RANK ECHOES FILTERING ########################
+def _global_bias_correct_power(lines):
+    """Apply IQ Bias Correction globally and return per-line mean power"""
+
+    all_real = np.concatenate([line.real for line in lines])
+    all_imag = np.concatenate([line.imag for line in lines])
+    i_bias = np.mean(all_real)
+    q_bias = np.mean(all_imag)
+    return [np.mean(np.abs((line.real - i_bias) + 1j * (line.imag - q_bias)) ** 2) for line in lines]
+
+def filter_rank_echoes(noise: dict, mission_id: str):
+
+    filtered = {}
+    for (subswath, pol), (az_time, rank_db) in noise.items():
 
         # the rank echo belongs to the first burst of the data take:
         # remove noise spike occurring in S1A/B, IW1 and EW1
@@ -160,16 +145,16 @@ def calculate_noise_db(pf_path, mission_id, rank_echoes_present):
             # in EW1 case, also remove last echo (nadir returns might be present)
             elif subswath == "EW1":
                 l0n_noise = [rank_db[0]] + rank_db[2:-1]
-                l0n_time = [az_time[0]] + az_time[2:-1]          
+                l0n_time = [az_time[0]] + az_time[2:-1]
             else:
                 l0n_noise = rank_db
-                l0n_time = az_time      
+                l0n_time = az_time
         else:
             l0n_noise = rank_db
-            l0n_time = az_time 
+            l0n_time = az_time
 
         # the rank echo belongs to an odd-numbered burst: remove
-        if mission_id.upper() in ["S1A", "S1B"]:            
+        if mission_id.upper() in ["S1A", "S1B"]:
             if subswath == "IW1":
                 # in this case the first rank of the first burst was already removed
                 # (so odd-numbered burst = even-indexed values)
@@ -185,18 +170,60 @@ def calculate_noise_db(pf_path, mission_id, rank_echoes_present):
             final_times = l0n_time
             final_noise = l0n_noise
 
-        noise.update({
-            (subswath, pol): [final_times, final_noise]
-        })
+        filtered[(subswath, pol)] = [final_times, final_noise]
 
     # for EW2, substitute noise values with ones from EW3
-    keys_to_replace = [k for k in noise if k[0] == "EW2"]
+    keys_to_replace = [k for k in filtered if k[0] == "EW2"]
     for subswath, pol in keys_to_replace:
-        noise[("EW2", pol)][1][1:] = noise[("EW3", pol)][1][1:]
+        filtered[("EW2", pol)][1][1:] = filtered[("EW3", pol)][1][1:]
 
-    return noise
+    return filtered
 
-def get_noise_pwr_from_l0n(l0n_path: Path, aux_ins_path: Path):
+
+def calculate_noise_db(l0n_path: Path, mission_id: str, rank_echoes_present: bool):
+    """Compute for each channel the noise power sequences from an L0N SAFE product's raw packets"""
+
+    if mission_id.upper() in ["S1C", "S1D"] and rank_echoes_present:
+        denoise_logger.error(
+            "S1C/S1D rank-echo handling not implemented yet. Aborting..."
+        )
+        sys.exit(128)
+
+    channels = {}
+    for dat_path in sorted(Path(l0n_path).glob("*.dat")):
+        denoise_logger.info(f"Decoding raw packets from {dat_path.name}...")
+        for key, data in _channel_lines(dat_path).items():
+            channels.setdefault(key, {"lines": [], "times": [], "burst_sizes": []})
+            channels[key]["lines"].extend(data["lines"])
+            channels[key]["times"].extend(data["times"])
+            channels[key]["burst_sizes"].extend(data["burst_sizes"])
+
+    noise = {}
+    for key, data in channels.items():
+        powers = _global_bias_correct_power(data["lines"])
+        times = data["times"]
+        burst_sizes = data["burst_sizes"]
+
+        # reduce each burst's lines to one representative (mean power, first time) sample:
+        # burst_sizes = [n_preamble, rank_burst_1, rank_burst_2, ... , n_postamble]
+        rank_db = []
+        az_time = []
+        idx = 0
+        for size in burst_sizes:
+            rank_db.append(np.mean(powers[idx : idx + size]))
+            az_time.append(times[idx])
+            idx += size
+
+        noise[key] = [az_time, rank_db]
+
+    # rank echoes filtering based on mission ID
+    filtered = filter_rank_echoes(noise, mission_id)
+
+    return filtered
+
+
+def get_noise_pwr_from_l0n(l0n_path: Path, aux_ins_path: Path = None):
+    """Extract for each channel noise power sequences from a Sentinel-1 L0N SAFE product"""
 
     mission_id = l0n_path.stem[0:3].lower()
 
@@ -206,63 +233,8 @@ def get_noise_pwr_from_l0n(l0n_path: Path, aux_ins_path: Path):
     else:
         denoise_logger.info("Rank echoes not present in L0N file")
 
-    binary = os.environ.get("S1_L0IMPORTQC_PATH")
-    if not binary:
-        denoise_logger.error("Environment variable S1_L0IMPORTQC_PATH is not set. Aborting...")
-        sys.exit(128)
+    noise = calculate_noise_db(l0n_path, mission_id, rank_echoes_present)
 
-    BASE = Path(__file__).resolve().parent
+    denoise_logger.info("Noise power calculation completed successfully")
 
-    # if folder already exists, subprocess will give error: use a temp dir to avoid permission issues
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        output_folder = Path(tmp_dir) / "tmp_s1l0"
-
-        l0import_run = subprocess.Popen([
-                binary,
-                "-i", f"{l0n_path.resolve()}",
-                "-a", f"{aux_ins_path.resolve()}",
-                "-r", f"{BASE}/aux_rules/{mission_id}-aux-rules.xml",
-                "-n", output_folder.resolve()
-            ], 
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            cwd=os.getcwd()
-        )
-
-        # regex pattern to extract the message part after last "]: " 
-        log_message_pattern = re.compile(r".*\]: (.*)$")
-
-        # stream output line by line
-        for chunk in l0import_run.stdout:
-            for line in chunk.splitlines():
-                line = line.strip()
-                if not line:
-                    continue
-
-                # extract the meaningful message
-                match = log_message_pattern.match(line)
-                if match:
-                    message = match.group(1).strip()
-                else:
-                    message = line
-
-                # filter out SET_, CLOSE_, USE_ lines
-                if not message.startswith(("SET_", "CLOSE_", "USE_", "TOTAL")):
-                    if "error" in message.lower():
-                        denoise_logger.error(message)
-                    else:
-                        denoise_logger.info(message)
-
-        # wait for process to finish
-        l0import_run.wait()
-
-        if l0import_run.returncode != 0:
-            raise RuntimeError(f"Sentinel1L0ImportQC failed with exit code {l0import_run.returncode}")
-        else:
-            denoise_logger.info("Noise power calculation completed successfully")
-
-        noise = calculate_noise_db(output_folder, mission_id, rank_echoes_present)
-
-    # remove temporary folder (handled automatically by TemporaryDirectory context manager)
     return noise

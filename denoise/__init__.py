@@ -3,7 +3,7 @@
 
 """Configuration and constants module for the S1 L1N processor."""
 
-__version__ = '1.0.1'
+__version__ = '1.0.2'
 
 PROCESSOR_NAME = 's1_l1n_processor'
 

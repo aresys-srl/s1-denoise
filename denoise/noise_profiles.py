@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 from tabulate import tabulate
 
-from arepytools.timing.precisedatetime import PreciseDateTime
+from perseo_core.timing import PreciseDateTime
 
 # Local imports
 from denoise.logger import denoise_logger

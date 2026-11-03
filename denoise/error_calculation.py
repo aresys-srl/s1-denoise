@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ET
 import numpy as np
 from scipy.interpolate import interp1d, RegularGridInterpolator
 
-from arepytools.timing.precisedatetime import PreciseDateTime
+from perseo_core.timing import PreciseDateTime
 
 DN_VALUES = {
     ("IW", "SLC"): 237,

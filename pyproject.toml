@@ -1,0 +1,41 @@
+[project]
+name = "denoise"
+description = "Noise vector reconstruction for Level 1 Sentinel-1 products"
+authors = [
+  { name="Aresys S.R.L.", email="info@aresys.it" }
+]
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+dynamic = ["version"]
+license = { file = "LICENSE.txt" }
+dependencies = [
+    "arepyextras-eo-products",
+    "matplotlib",
+    "tabulate",
+    "rasterio",
+    "xmltodict",
+    "colorlog",
+    "scipy",
+    "pandas",
+    "seaborn",
+    "click",
+    "numpydantic"
+]
+
+[project.scripts]
+denoise = "denoise.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "denoise/__init__.py"
+
+[project.optional-dependencies]
+dev = ["nox", "ruff", "pylint"]
+cli = ["click"]

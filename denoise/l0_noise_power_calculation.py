@@ -134,23 +134,23 @@ def _global_bias_correct_power(lines):
 def filter_rank_echoes(noise: dict, mission_id: str):
 
     filtered = {}
-    for (subswath, pol), (az_time, rank_db) in noise.items():
+    for (subswath, pol), (az_time, burst_powers) in noise.items():
 
         # the rank echo belongs to the first burst of the data take:
         # remove noise spike occurring in S1A/B, IW1 and EW1
         if mission_id.upper() in ["S1A", "S1B"]:
             if subswath == "IW1":
-                l0n_noise = [rank_db[0]] + rank_db[2:]
+                l0n_noise = [burst_powers[0]] + burst_powers[2:]
                 l0n_time = [az_time[0]] + az_time[2:]
             # in EW1 case, also remove last echo (nadir returns might be present)
             elif subswath == "EW1":
-                l0n_noise = [rank_db[0]] + rank_db[2:-1]
+                l0n_noise = [burst_powers[0]] + burst_powers[2:-1]
                 l0n_time = [az_time[0]] + az_time[2:-1]
             else:
-                l0n_noise = rank_db
+                l0n_noise = burst_powers
                 l0n_time = az_time
         else:
-            l0n_noise = rank_db
+            l0n_noise = burst_powers
             l0n_time = az_time
 
         # the rank echo belongs to an odd-numbered burst: remove
@@ -180,7 +180,7 @@ def filter_rank_echoes(noise: dict, mission_id: str):
     return filtered
 
 
-def calculate_noise_db(l0n_path: Path, mission_id: str, rank_echoes_present: bool):
+def calculate_noise_power(l0n_path: Path, mission_id: str, rank_echoes_present: bool):
     """Compute for each channel the noise power sequences from an L0N SAFE product's raw packets"""
 
     if mission_id.upper() in ["S1C", "S1D"] and rank_echoes_present:
@@ -206,15 +206,15 @@ def calculate_noise_db(l0n_path: Path, mission_id: str, rank_echoes_present: boo
 
         # reduce each burst's lines to one representative (mean power, first time) sample:
         # burst_sizes = [n_preamble, rank_burst_1, rank_burst_2, ... , n_postamble]
-        rank_db = []
+        burst_powers = []
         az_time = []
         idx = 0
         for size in burst_sizes:
-            rank_db.append(np.mean(powers[idx : idx + size]))
+            burst_powers.append(np.mean(powers[idx : idx + size]))
             az_time.append(times[idx])
             idx += size
 
-        noise[key] = [az_time, rank_db]
+        noise[key] = [az_time, burst_powers]
 
     # rank echoes filtering based on mission ID
     filtered = filter_rank_echoes(noise, mission_id)
@@ -233,7 +233,7 @@ def get_noise_pwr_from_l0n(l0n_path: Path, aux_ins_path: Path = None):
     else:
         denoise_logger.info("Rank echoes not present in L0N file")
 
-    noise = calculate_noise_db(l0n_path, mission_id, rank_echoes_present)
+    noise = calculate_noise_power(l0n_path, mission_id, rank_echoes_present)
 
     denoise_logger.info("Noise power calculation completed successfully")
 

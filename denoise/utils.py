@@ -5,16 +5,32 @@
 General-purpose utility module for the denoising pipeline.
 
 Provides helpers for ISO timestamp conversion, swath range boundary lookup,
-slant-to-ground and ground-to-slant range coordinate conversion, Z-score-based
+slant-to-ground and ground-to-slant range coordinate conversion, interval-based
 outlier removal for noise pulse outlier detection in noise power series, and list normalisation.
 """
 
 import numpy as np
-from scipy.constants import speed_of_light
 
 from perseo_core.timing import PreciseDateTime
 
-from denoise.__init__ import OUTLIER_DETECTION_CONSTANT
+from denoise.__init__ import NOISE_LOWER_BOUND, NOISE_UPPER_BOUND
+
+
+def linear_to_db(value, is_amplitude=False):
+    """Convert value(s) from linear scale to dB (20*log10 if is_amplitude, else 10*log10). Accepts scalars, lists or arrays."""
+
+    factor = 20 if is_amplitude else 10
+    db = factor * np.log10(np.asarray(value, dtype=float))
+
+    return float(db) if db.ndim == 0 else db
+
+def db_to_linear(value, is_amplitude=False):
+    """Convert value(s) from dB to linear scale (10**(x/20) if is_amplitude, else 10**(x/10)). Accepts scalars, lists or arrays."""
+
+    factor = 20 if is_amplitude else 10
+    linear = 10 ** (np.asarray(value, dtype=float) / factor)
+    
+    return float(linear) if linear.ndim == 0 else linear
 
 def iso_to_datetime(iso_str: str) -> PreciseDateTime:
     """Convert ISO timestamp string to PreciseDateTime object."""
@@ -97,60 +113,37 @@ def slant2ground(start_az_time, sim_noise_sr, inc_angle_sr, coordinate_conversio
 
     return sim_noise_gr, inc_angle_gr
 
-def remove_outliers(x, y, alpha=OUTLIER_DETECTION_CONSTANT):
+def remove_outliers(azimuth_times, noise_pulses, expected_noise_value):
     """
-    Removes outliers in y using Z-score (sigma-clipping), and removes corresponding x values.
+    Removes noise pulses whose value falls outside a given interval, and removes corresponding azimuth times.
 
     Parameters:
-        x : array-like, same length as y
-        y : array-like
-        alpha : detection threshold in standard deviations (Z-score).
-                Lower alpha → more aggressive detection → more points removed.
-                Higher alpha → more conservative detection → fewer points removed.
-
-                Typical values:
-                    2.5  → aggressive, many outliers removed
-                    3.0  → standard
-                    3.5  → conservative
+        azimuth_times : array-like, same length as noise_pulses
+        noise_pulses : array-like
+        expected_noise_value : float, expected noise power (linear scale) from AUX_INS.
+            Pulses outside [expected - NOISE_LOWER_BOUND dB, expected + NOISE_UPPER_BOUND dB] are removed.
 
     Returns:
-        x_clean, y_clean : arrays with outliers removed
-        outlier_indices : indices of y that were removed, with [index, x_val, y_val]
+        azimuth_times_clean, noise_pulses_clean : arrays with outliers removed
+        outlier_indices : removed points, as [index, azimuth_time, noise_pulse], sorted by index
     """
 
-    x = np.array(x)
-    y = np.array(y, dtype=float)
-    outlier_indices = []
-
-    if len(y) < 3:
-        # Too few points to compute meaningful statistics
-        return x, y, outlier_indices
-
-    mean = np.mean(y)
-    std = np.std(y, ddof=1)
-    if std == 0:
-        # No variability, nothing to remove
-        return x, y, outlier_indices
-
-    # Compute Z-score
-    z_scores = (y - mean) / std
+    azimuth_times = np.array(azimuth_times)
+    noise_pulses = np.array(noise_pulses, dtype=float)
+    min_value, max_value = expected_noise_value * db_to_linear(-NOISE_LOWER_BOUND), expected_noise_value * db_to_linear(NOISE_UPPER_BOUND)
 
     # Detect outliers
-    mask = np.abs(z_scores) > alpha
+    mask = (noise_pulses < min_value) | (noise_pulses > max_value)
     indices = np.where(mask)[0]
 
-    # Collect outlier info
-    for idx in indices:
-        outlier_indices.append([idx, x[idx], y[idx]])
+    # Collect outlier info (already sorted by original index)
+    outlier_indices = [[idx, azimuth_times[idx], noise_pulses[idx]] for idx in indices]
 
     # Remove outliers
-    x_clean = x[~mask]
-    y_clean = y[~mask]
+    azimuth_times_clean = azimuth_times[~mask]
+    noise_pulses_clean = noise_pulses[~mask]
 
-    # Sort outlier indices by original index
-    outlier_indices_sorted = sorted(outlier_indices, key=lambda u: u[0])
-
-    return x_clean, y_clean, outlier_indices_sorted
+    return azimuth_times_clean, noise_pulses_clean, outlier_indices
 
 def ensure_list(x) -> list:
     """

@@ -16,6 +16,16 @@ dist/
 *.out
 *.csv
 *.png
+test/batch*
+test/input*
+test/aux-files
+test/fonts
+
+# Documentation
+*.pdf
+docs/fonts/
+docs/img/
+docs/template_images/
 
 # Sentinel-1 data & products
 *.SAFE

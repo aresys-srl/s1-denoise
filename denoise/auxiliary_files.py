@@ -34,6 +34,8 @@ class AuxiliaryFiles:
         self.read_from_aux_pp1()
 
         self.pg_references = {}
+        self.expected_noise_values = {}
+        self.azimuth_steering_rates = {}
         self.read_from_aux_ins()
 
 
@@ -126,18 +128,32 @@ class AuxiliaryFiles:
             swath = int_cal_param.findtext("swath")
             pol = int_cal_param.findtext("polarisation")
             pg_ref = int_cal_param.find("pgReference")
+            expected_noise = int_cal_param.find("noise")
 
             self.pg_references.update({
                 (swath, pol): pg_ref
             })
 
+            self.expected_noise_values.update({
+                (swath, pol): expected_noise
+            })
+
+        for swath_param in root.findall(".//swathParams"):
+            swath = swath_param.findtext("swath")
+            steering_rate = swath_param.findtext("radarParams/azimuthSteeringRate")
+
+            if steering_rate is not None:
+                self.azimuth_steering_rates.update({
+                    swath: float(steering_rate)     # [deg/s]
+                })
+
         # if no matching swath/polarisation is found
-        if not self.processing_parameters:
+        if not self.pg_references:
             denoise_logger.error(f"Error reading INS file. Aborting...")
             sys.exit(128)
     
     def get_gain_from_pp1(self, product_id, subswath, pol):
-        """Return windowCoefficient for given product_id, subswath and polarization from proper aux-pp1 file"""
+        """Return gain for given product_id, subswath and polarization from proper aux-pp1 file"""
 
         pp1_gain_map = {
             "HH": 0,
@@ -211,3 +227,18 @@ class AuxiliaryFiles:
                         float(self.pg_references.get((swath, polarisation))[1].text)])
 
         return np.linalg.norm(val)
+    
+    def get_expected_noise_value(self, swath, polarisation):
+        """Return expected noise value written in AUX_INS file"""
+
+        val = float(self.expected_noise_values.get((swath, polarisation)).text)
+
+        return val
+
+    def get_azimuth_steering_rate(self, swath):
+        """Return azimuth steering rate [rad/s] written in AUX_INS file"""
+
+        if swath not in self.azimuth_steering_rates:
+            raise ValueError(f"Azimuth steering rate for swath {swath} not found in AUX_INS file")
+
+        return np.deg2rad(self.azimuth_steering_rates[swath])

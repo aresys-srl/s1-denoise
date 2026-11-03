@@ -92,5 +92,10 @@ def denoise_cli(job_order_path):
     except SystemExit as e:
         return_code = e.code
         raise
+    except Exception:
+        # any unhandled error stops the processor with exit code 128
+        denoise_logger.exception("Unexpected error. Aborting...")
+        return_code = 128
+        sys.exit(128)
     finally:
         denoise_logger.info(f"Exit code: {return_code}")

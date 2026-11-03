@@ -40,7 +40,7 @@ jobs:
       - name: Check tag matches package version
         run: test -f "dist/denoise-${GITHUB_REF_NAME#v}-py3-none-any.whl"
 
-      # Create release on tag e attach wheel and sdist as assets
+      # Create release on tag and attach wheel and sdist as assets
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*

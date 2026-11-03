@@ -17,6 +17,8 @@ from scipy.interpolate import interp1d, RegularGridInterpolator
 
 from perseo_core.timing import PreciseDateTime
 
+from denoise.utils import linear_to_db
+
 DN_VALUES = {
     ("IW", "SLC"): 237,
     ("IW", "GRD"): 474,
@@ -132,7 +134,7 @@ def compare_noise(noise_file, denoise_file, dn):
     noise[noise == 0] = np.nan
     denoise[denoise == 0] = np.nan
 
-    diff_db = 10 * np.log10(np.maximum(np.abs(denoise), 1e-12)) - 10 * np.log10(np.maximum(np.abs(noise), 1e-12))
+    diff_db = linear_to_db(np.maximum(np.abs(denoise), 1e-12)) - linear_to_db(np.maximum(np.abs(noise), 1e-12))
 
     mae = np.nanmean(np.abs(diff_db))
     max_err = np.nanmax(np.abs(diff_db))

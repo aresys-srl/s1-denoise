@@ -22,7 +22,6 @@ dependencies = [
     "rasterio",
     "scipy",
     "sentinel1decoder",
-    "tabulate",
     "xmltodict",
     "perseo-core"
 ]

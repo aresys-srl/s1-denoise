@@ -8,9 +8,10 @@ For each processed channel the processor:
 
 1. reads acquisition geometry and calibration data from auxiliary files (PP1, CAL, INS);
 2. models the thermal noise using range spread loss, elevation antenna pattern, and calibration LUT;
-3. optionally refines the noise power correction using an associated Level 0 Noise (L0N) product, applying a Z-score outlier filter to remove spurious noise pulses;
-4. for GRD products, handles sub-swath separation, per-subswath noise reconstruction and cross-subswath merging;
-5. writes the output noise XML files and, if nominal noise annotations are present in the SAFE product, reports the Mean Absolute Error (MAE) and maximum absolute error in dB.
+3. optionally refines the noise power correction using an associated Level 0 Noise (L0N) product;
+4. discards noise pulses whose power deviates from the expected noise level in AUX_INS by more than −3/+1 dB;
+5. for GRD products, handles sub-swath separation, per-subswath noise reconstruction and cross-subswath merging;
+6. writes the output noise XML files and, if nominal noise annotations are present in the SAFE product, reports the Mean Absolute Error (MAE) and maximum absolute error in dB.
 
 ---
 

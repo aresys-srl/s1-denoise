@@ -5,10 +5,10 @@
 Module for parsing and extracting geophysical parameters from Sentinel-1 L1
 annotation XML files.
 
-Provides readers for noise power correction, elevation pattern, incidence angles,
-PG correction, FM rate, Doppler centroid, and orbit state vectors, as well as
-helpers for slant range time array construction, azimuth deramping matrix
-computation, and antenna rate to frequency conversion.
+Provides readers for noise power correction, antenna patterns (elevation pattern,
+incidence angles), PG correction, FM rate, and orbit state vectors, as well as
+helpers for slant range time array construction, orbit construction, and antenna
+rate to frequency conversion.
 """
 
 import numpy as np
@@ -117,106 +117,45 @@ def read_noise_power_correction_from_annotation(metadata_dict, swath_id):
     
     return final_noise_pwr, convert_az_times(final_times)
 
-def read_elevation_pattern(metadata_dict, swath_id, az_t):
-    "Create two lists of elevation pattern gain arrays and slant range time arrays"
-    
-    data = metadata_dict['product']['antennaPattern']['antennaPatternList']['antennaPattern']
-    
-    elevation_pattern_gain = []
-    slant_range_t = []
-    azimuth_times = []
+def read_antenna_patterns(metadata_dict, swath_id):
+    """Parse once the antenna pattern records of the swath: returns a dict of lists (azimuth times,
+    elevation pattern gains, incidence angles and slant range times), one element per record"""
+
+    data = ensure_list(metadata_dict['product']['antennaPattern']['antennaPatternList']['antennaPattern'])
+
+    antenna_patterns = {
+        "azimuth_times": [],
+        "elevation_pattern_gain": [],
+        "incidence_angles": [],
+        "slant_range_t": []
+    }
 
     for element in data:
         if element['swath'] == swath_id:
 
-            azimuth_times.append(PreciseDateTime.from_utc_string(element['azimuthTime']))
+            antenna_patterns["azimuth_times"].append(PreciseDateTime.from_utc_string(element['azimuthTime']))
 
-            elevation_real = [float(i) for i in element['elevationPattern']['#text'].split(' ')][::2]
-            elevation_imag = [float(i) for i in element['elevationPattern']['#text'].split(' ')][1::2]
-            elevation_pattern_gain.append(abs(np.array(elevation_real) + np.array(elevation_imag) * 1j))
+            elevation = np.array(element['elevationPattern']['#text'].split(' '), dtype=float)
+            antenna_patterns["elevation_pattern_gain"].append(abs(elevation[::2] + elevation[1::2] * 1j))
 
-            range_t = [float(i) for i in element['slantRangeTime']['#text'].split(' ')]
-            slant_range_t.append(range_t)
-    
-    az_correspondent_time = np.argmin(abs(np.array(azimuth_times) - az_t))
+            antenna_patterns["incidence_angles"].append(np.array(element['incidenceAngle']['#text'].split(' '), dtype=float))
+            antenna_patterns["slant_range_t"].append(np.array(element['slantRangeTime']['#text'].split(' '), dtype=float))
 
-    return elevation_pattern_gain[az_correspondent_time], slant_range_t[az_correspondent_time]
+    antenna_patterns["azimuth_times"] = np.array(antenna_patterns["azimuth_times"])
 
-def read_incidence_angles(metadata_dict, swath_id, az_t):
-    "Create a list of incidence angles array"
-    
-    data = metadata_dict['product']['antennaPattern']['antennaPatternList']['antennaPattern']
-    
-    incidence_angles = []
-    slant_range_t = []
-    azimuth_times = []
-    
-    for element  in data:
-        if element['swath'] == swath_id:
+    return antenna_patterns
 
-            azimuth_times.append(PreciseDateTime.from_utc_string(element['azimuthTime']))
-            inc_ang = [float(i) for i in element['incidenceAngle']['#text'].split(' ')]
-            incidence_angles.append(inc_ang)
+def closest_antenna_pattern_index(antenna_patterns, az_t):
+    """Index of the antenna pattern record closest in azimuth time to az_t"""
 
-            range_t = [float(i) for i in element['slantRangeTime']['#text'].split(' ')]
-            slant_range_t.append(range_t)
-    
-    az_correspondent_time = np.argmin(abs(np.array(azimuth_times) - az_t))
-    return incidence_angles[az_correspondent_time], slant_range_t[az_correspondent_time]
+    return np.argmin(abs(antenna_patterns["azimuth_times"] - az_t))
 
-def compute_deramping_function(metadata_dict, N_azimuth, range_filter=1, burst_idx = None, doppler_centroid = None):
-    """Returns a np.ndarray containing the complex values for the deramping function (azimuth times, range times)"""
-
-    azimuth_times = create_burst_az_times(metadata_dict, N_azimuth)
-    range_times = create_slant_range_times(metadata_dict)[::range_filter]
-
-    # Derive DC info
-    if doppler_centroid is None:
-        DC_poly_coeffs = extract_doppler_centroid(metadata_dict, burst_idx)
-        DC = DC_poly_coeffs.evaluate(range_times)
-    else:
-        DC = np.ones(range_times.size) * doppler_centroid
-
-    FR, Az_mid_time = extract_FR_info(metadata_dict, range_times, burst_idx)
-
-    AR, Az_steering_rate = extract_AR_info(metadata_dict, Az_mid_time, range_times)
-    
-    K_TU = - FR * AR / (AR - FR)
-
-    deramping_matrix = np.zeros((N_azimuth, len(range_times)))
-    denoise_logger.debug('Start deramping matrix computation')
-
-    deramping_matrix = (np.pi * K_TU * (DC / FR + azimuth_times.reshape((azimuth_times.size, 1)))**2 
-                        - 2*np.pi * (DC / FR + azimuth_times.reshape((azimuth_times.size, 1))) * DC)
-    
-    complex_deramping_matrix = np.exp(-1j * deramping_matrix)
-
-    return complex_deramping_matrix, AR[range_times.size // 2], FR[range_times.size // 2], Az_steering_rate
-
-def create_burst_az_times(metadata_dict, N):
-    """Returns a np.array of relative azimuth times, centered in 0 with delta_t = azimuthTimeInterval"""
-
-    delta_azimuth = float(metadata_dict['product']['imageAnnotation']['imageInformation']['azimuthTimeInterval'])
-    az_times = (np.linspace(0, N-1, N) - (N-1)/2) * delta_azimuth
-    return az_times
-
-def extract_AR_info(metadata_dict, az_t, range_times, subswath = None):
-
-    # fixed quantities in [rad], do not change 
-    ANTENNA_RATES = {
-        "IW1": 0.02775717,
-        "IW2": 0.01710184,
-        "IW3": 0.02438994,
-        "EW1": 0.04172900,
-        "EW2": 0.04906998,
-        "EW3": 0.04129791,
-        "EW4": 0.04385479,
-        "EW5": 0.03705082,
-    }
+def extract_AR_info(metadata_dict, az_t, range_times, az_steering_rate, orbit = None):
+    """az_steering_rate is the azimuth steering rate [rad/s] of the subswath, from AUX_INS.
+    orbit can be passed to avoid rebuilding it from the annotation at each call"""
 
     # Derive AR info
-    az_steering_rate = ANTENNA_RATES[subswath]
-    AR_vec = angles2freq_conversion(metadata_dict, az_t) * az_steering_rate * np.ones(len(range_times))
+    AR_vec = angles2freq_conversion(metadata_dict, az_t, orbit) * az_steering_rate * np.ones(len(range_times))
 
     return AR_vec
 
@@ -233,13 +172,19 @@ def extract_FR_info(metadata_dict, range_times, burst_idx = None, is_grd: bool =
     
     return FR, az_mid_time
 
-def angles2freq_conversion(metadata_dict, az_t):
+def build_orbit(metadata_dict):
+    """Generate the orbit object from annotated orbit times, positions and velocities"""
+
+    date_time_vec, positions, velocities = extract_info_orbita(metadata_dict)
+
+    return CubicSplineTrajectory(times=date_time_vec, positions=positions, velocities=velocities)
+
+def angles2freq_conversion(metadata_dict, az_t, orbit = None):
 
     fc_hz = float(metadata_dict['product']['generalAnnotation']['productInformation']['radarFrequency'])
 
-    date_time_vec, positions, velocities = extract_info_orbita(metadata_dict)
-    # Generate the orbit object from times and positions
-    orbit = CubicSplineTrajectory(times=date_time_vec, positions=positions, velocities=velocities)
+    if orbit is None:
+        orbit = build_orbit(metadata_dict)
     velocity = np.linalg.norm(orbit.velocity(az_t))
     
     return 2 * velocity / (speed_of_light / fc_hz)
@@ -298,7 +243,10 @@ def extract_FMrate(metadata_dict, burst_index=None, is_grd: bool = False, subswa
         }
 
         current_swath = swath_in_swaths[subswath]
-        delta = current_swath * (burst_times_vec[1] - burst_times_vec[0]) / tot_swath_number
+        if burst_times_vec.size > 1:
+            delta = current_swath * (burst_times_vec[1] - burst_times_vec[0]) / tot_swath_number
+        else:
+            denoise_logger.warning(f"Only one azimuth FM rate record found: no time shift applied for subswath {subswath}")
 
     return burst_times_vec + delta, polynomials
 
@@ -317,18 +265,6 @@ class PolynomialCoefficients2():
     def evaluate(self, x):
         return self.termine_noto + self.coeff_lineare * (x - self.x0) + self.coeff_quadratico * ((x - self.x0) **2)
    
-
-def extract_doppler_centroid(metadata_dict, burst_idx):
-    """Returns a Polinomial_coefficients_2 containing the doppler centroid coefficients"""
-
-    doppler_data = metadata_dict['product']['dopplerCentroid']['dcEstimateList']['dcEstimate'][burst_idx]
-    t0 = float(doppler_data['t0'])
-
-    poly = doppler_data['dataDcPolynomial']['#text'].split(' ')
-
-    doppler_coeffs = PolynomialCoefficients2(x0 = t0, termine_noto = float(poly[0]), coeff_lineare = float(poly[1]), coeff_quadratico = float(poly[2]))
-    
-    return doppler_coeffs
 
 def extract_info_orbita(metadata_dict):
     """Rerurns two np.arrays:  the first containing orbit times [n], the second containing orbit positions [3, n]"""

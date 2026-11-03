@@ -14,7 +14,6 @@ associated L0N file.
 import sys
 from pathlib import Path
 import numpy as np
-from tabulate import tabulate
 
 from perseo_core.timing import PreciseDateTime
 
@@ -27,31 +26,6 @@ from denoise.auxiliary_files import AuxiliaryFiles
 from denoise.output import OutputNoiseVectors_SLC, OutputNoiseVectors_GRD
 from denoise.l0_noise_power_calculation import get_noise_pwr_from_l0n
 from denoise.utils import ensure_list, slant2ground
-
-ERROR_THRESHOLD = 0.1
-
-def get_valid_matrix(matrix, first_valid_data, last_valid_data):
-    """Returns a matrix containing only the valid data"""
- 
-    row_n = len(first_valid_data[first_valid_data != -1])
-    col_n =  last_valid_data[last_valid_data != -1][0] - first_valid_data[first_valid_data != -1][0] + 1
-    result_matrix = np.zeros((row_n, col_n))
- 
-    ind = 0
-    for row in range(matrix.shape[0]):
-       
-        if first_valid_data[row] != -1:
-            result_matrix[ind, :] = matrix[row, first_valid_data[row] : last_valid_data[row] +1]
-            ind += 1
-   
-    return result_matrix
-
-def print_results(error_list, headers) -> None:
-
-    formatted_headers = headers[1:]
-    formatted_values = [row[1:] for row in error_list]
-
-    denoise_logger.debug("Mean error on bursts vs orbit time:\n"+tabulate(formatted_values, headers=formatted_headers, tablefmt="simple"))
 
 def print_exec_time(elapsed_seconds: float) -> None:
 
@@ -94,17 +68,21 @@ def slc_processing(safe, aux_files, dn_value, noise_power_correction):
         sim_noises = {}
         geo_grid_info = metadata_dict['product']['geolocationGrid']
 
+        # slant range times are the same for all the bursts of the swath
+        range_t = create_slant_range_times(metadata_dict)
+        thermal_noise.set_range_values(range_t)
+
+        denoise_logger.info(f"Generating noise profiles for subswath {subswath} ({pol})")
+
         for rel_burst in range(channel.num_bursts):
 
             denoise_logger.debug(f"Generating noise profiles for burst {rel_burst+1} ({pol}, {subswath})")
-        
+
             az_t0 = PreciseDateTime.from_utc_string((channel.annotation.find('antennaPattern/antennaPatternList/antennaPattern[{}]/azimuthTime'.format(rel_burst+1)).text))
 
-            range_t = create_slant_range_times(metadata_dict)
             az_central_time = az_t0 + az_dt * lines_per_burst/2
-            
+
             # create simulated noise
-            thermal_noise.set_range_values(range_t)
             thermal_noise.rel_burst = rel_burst
             thermal_noise.get_shrink_factor()
             
@@ -171,10 +149,12 @@ def grd_processing(safe, aux_files, dn_value, noise_power_correction):
                 ap for ap in antenna_patterns
                 if ap.findtext('swath') == subswath
             ]
+
+            denoise_logger.info(f"Generating noise profiles for subswath {subswath} ({pol})")
                     
             for index in range(len(subswath_antenna_patterns)):
 
-                denoise_logger.info(f"Generating noise profiles for block {index+1} ({pol}, {subswath})")
+                denoise_logger.debug(f"Generating noise profiles for block {index+1} ({pol}, {subswath})")
                             
                 az_t0 = PreciseDateTime.from_utc_string(subswath_antenna_patterns[index].findtext('azimuthTime'))
 

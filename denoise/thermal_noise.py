@@ -12,31 +12,31 @@ both SLC and GRD processing for TopSAR IW and EW modes.
 """
 
 import numpy as np
-import matplotlib.pyplot as plt
-import os
 import math
 import sys
 from numpy.typing import NDArray
 from scipy.constants import speed_of_light
 
 from denoise import R_REF
-from denoise.utils import remove_outliers
+from denoise.utils import db_to_linear, remove_outliers
 from denoise.logger import denoise_logger
 from denoise.auxiliary_files import AuxiliaryFiles
 from denoise.xml_reader import (
     read_pg_correction_list,
     read_noise_power_correction_from_annotation,
-    read_elevation_pattern,
-    read_incidence_angles, 
-    extract_FR_info, 
-    extract_AR_info
+    read_antenna_patterns,
+    closest_antenna_pattern_index,
+    extract_FR_info,
+    extract_AR_info,
+    build_orbit
 )
 from denoise.noise_norm_factor import (
     find_fft_size, 
     hamming, 
     calculate_window_norm_factor, 
     update_window_noise_norm,
-    get_start_indices
+    get_start_indices,
+    get_look_overlap_samples
 )
 
 class ThermalNoise:
@@ -46,6 +46,8 @@ class ThermalNoise:
         self.metadata_dict = metadata_dict
         self.channel = channel
         self.annotation = channel.annotation
+        self.product_id = product_id
+
         if subswath is None:
             self.is_grd = False
             self.swath_id = channel.swath_id    # SLC case
@@ -62,6 +64,7 @@ class ThermalNoise:
         self.lines_per_burst = int(product["swathTiming"]["linesPerBurst"])
         if self.lines_per_burst == 0:
             self.lines_per_burst = 1300
+        self.samples_per_burst = int(product["swathTiming"]["samplesPerBurst"])
         self.sentinel_type = product['adsHeader']['missionId']
 
         # image annotation
@@ -88,6 +91,10 @@ class ThermalNoise:
         self.processing_bandwidth = float(azimuth_processing["processingBandwidth"])
         self.number_of_looks = int(azimuth_processing["numberOfLooks"])
         self.look_overlap = float(azimuth_processing["lookOverlap"])
+        self.azi_window_coefficient = float(azimuth_processing["windowCoefficient"])
+
+        range_processing = self.get_range_processing(self.swath_id)
+        self.rg_processing_bandwidth = float(range_processing["processingBandwidth"])
 
         # general annotation
         self.radar_frequency = float(product["generalAnnotation"]["productInformation"]["radarFrequency"])
@@ -103,23 +110,33 @@ class ThermalNoise:
             norm = math.sqrt(vx ** 2 + vy ** 2 + vz ** 2)
             self.velocities.append(norm)
 
+        # info from auxiliary files
+        self.read_aux_info(aux_info)
+
+        # annotation info that does not change between bursts/blocks: read only once
+        self.antenna_patterns = read_antenna_patterns(self.metadata_dict, self.swath_id)
+        self.pg_correction_factors, self.pg_az_t = read_pg_correction_list(self.annotation, self.swath_id)
+        self.orbit = build_orbit(self.metadata_dict)
+
         # other info
         self.get_noise_power_correction(noise_power_from_l0)
-        self.product_id = product_id
         self.range_over_sampling_factor = self.sampling_freq_afterdecimation() / self.rg_bandwidth()
         self.rel_burst = None # only for TOPSAR SLC
         self.range_t = None
         self.range_distances = None
         self.range_spread_loss = None
 
-        # info from auxiliary files
-        self.read_aux_info(aux_info)
-
     
     def get_azimuth_processing(self, swath_name):
         for sp in self.swath_params:
             if sp["swath"] == swath_name:
                 return sp["azimuthProcessing"]
+        raise KeyError(f"Swath {swath_name} not found")
+
+    def get_range_processing(self, swath_name):
+        for sp in self.swath_params:
+            if sp["swath"] == swath_name:
+                return sp["rangeProcessing"]
         raise KeyError(f"Swath {swath_name} not found")
 
     def read_aux_info(self, aux_info: AuxiliaryFiles):
@@ -137,8 +154,13 @@ class ThermalNoise:
         
         # from INS
         self.pg_reference = aux_info.get_pg_reference(self.swath_id, self.polarization)
+        self.expected_noise_value = aux_info.get_expected_noise_value(self.swath_id, self.polarization)
+        self.azimuth_steering_rate = aux_info.get_azimuth_steering_rate(self.swath_id)
 
         denoise_logger.debug(f"Absolute calibration constant: {self.absolute_calibration_constant}")
+
+    def rg_dim(self):
+        return int(self.metadata_dict["product"]["imageAnnotation"]["imageInformation"]["numberOfSamples"])
 
     def rg_bandwidth(self):
         data = self.annotation.findall(
@@ -153,8 +175,9 @@ class ThermalNoise:
                         )
                     ).text
                 )
+                return rg_bandwidth
 
-        return rg_bandwidth
+        raise ValueError(f"Range processing parameters for swath {self.swath_id} not found in annotation")
 
     def sampling_freq_afterdecimation(self):
         data = self.annotation.findall(
@@ -169,14 +192,15 @@ class ThermalNoise:
                         )
                     ).text
                 )
+                return sampling_freq_afterdecimation
 
-        return sampling_freq_afterdecimation
+        raise ValueError(f"Downlink information for swath {self.swath_id} not found in annotation")
 
     def pg_correction_computation(self, azimuth_T):
 
-        pg_correction_factors, pg_az_t = read_pg_correction_list(self.annotation, self.swath_id)
+        pg_az_t = self.pg_az_t
 
-        pg_corr_az_central_t = np.interp(azimuth_T - pg_az_t[0], (pg_az_t - pg_az_t[0]).astype(float), pg_correction_factors)
+        pg_corr_az_central_t = np.interp(azimuth_T - pg_az_t[0], (pg_az_t - pg_az_t[0]).astype(float), self.pg_correction_factors)
 
         return pg_corr_az_central_t
 
@@ -185,15 +209,21 @@ class ThermalNoise:
         if noise_power_from_l0 is None:
             noise_power_correction_factors, noise_az_t = read_noise_power_correction_from_annotation(self.metadata_dict, self.swath_id)
         else:
-            noise_az_t                      = noise_power_from_l0.get((self.swath_id,self.polarization))[0]
-            noise_power_correction_factors  = noise_power_from_l0.get((self.swath_id,self.polarization))[1]
+            noise_az_t = noise_power_from_l0.get((self.swath_id,self.polarization))[0]
+            noise_power_correction_factors = noise_power_from_l0.get((self.swath_id,self.polarization))[1]
 
         # discard noise pulses
-        self.noise_az_t, self.noise_power_correction_factors, self.outlier_detected = remove_outliers(noise_az_t, noise_power_correction_factors)
+        self.noise_az_t, self.noise_power_correction_factors, self.outlier_detected = remove_outliers(noise_az_t, noise_power_correction_factors, self.expected_noise_value)
 
         for ind in range(len(self.outlier_detected)):
             formatted = self.outlier_detected[ind][1].isoformat(timespec="microseconds").rstrip("Z")
             denoise_logger.warning(f"Noise pulse at azimuth time {formatted} discarded")
+
+        # all noise pulses discarded: fall back to the nominal expected noise from AUX_INS
+        if self.noise_power_correction_factors.size == 0 and len(noise_az_t) > 0:
+            denoise_logger.warning(f"All noise pulses discarded for {self.swath_id} {self.polarization}: using nominal noise value from AUX_INS")
+            self.noise_az_t = np.array(noise_az_t)
+            self.noise_power_correction_factors = np.full(self.noise_az_t.size, self.expected_noise_value)
 
     def noise_power_computation(self, azimuth_T):
 
@@ -215,12 +245,12 @@ class ThermalNoise:
     def elevation_pattern(self, azimuth_T):
 
         # elevation pattern used to compensate
-        elevation_pattern_gain, slant_range_t = read_elevation_pattern(
-            self.metadata_dict, self.swath_id, azimuth_T
-        )
+        idx = closest_antenna_pattern_index(self.antenna_patterns, azimuth_T)
 
         final_elevation_pattern_gain = np.interp(
-            self.range_t, slant_range_t, elevation_pattern_gain
+            self.range_t,
+            self.antenna_patterns["slant_range_t"][idx],
+            self.antenna_patterns["elevation_pattern_gain"][idx]
         )
 
         return final_elevation_pattern_gain
@@ -228,12 +258,12 @@ class ThermalNoise:
     def incidence_angles(self, azimuth_T):
 
         # incidence angles used to compensate
-        incidence_angles, slant_range_t = read_incidence_angles(
-            self.metadata_dict, self.swath_id, azimuth_T
-        )
+        idx = closest_antenna_pattern_index(self.antenna_patterns, azimuth_T)
 
         final_incidence_angles = np.interp(
-            self.range_t, slant_range_t, incidence_angles
+            self.range_t,
+            self.antenna_patterns["slant_range_t"][idx],
+            self.antenna_patterns["incidence_angles"][idx]
         )
         return final_incidence_angles
 
@@ -267,67 +297,6 @@ class ThermalNoise:
 
         return np.array(simulated_noise, dtype=np.float64), np.sin(inc_angles)
 
-    def plot_in_range(self, burst_idx, fig_name):
-
-        fig2 = plt.figure(figsize=(14, 6))
-        ax1 = fig2.add_subplot(1, 2, 1)
-        ax1.plot(10 * np.log10(self.elevation_pattern(burst_idx)), label="elevation pattern")
-
-        ax1.set_xlabel("range samples")
-        plt.legend()
-        ax1.set_ylabel(r"$\sigma^0$ [dB]")
-
-        ax2 = fig2.add_subplot(1, 2, 2)
-        ax2.plot(10 * np.log10(self.range_spread_loss), label="range spread loss")
-        ax2.set_xlabel("range samples")
-        plt.legend()
-        ax2.set_ylabel(r"$\sigma^0$ [dB]")
-
-        plt.grid()
-        plt.savefig(os.path.join(fig_name))
-
-    def hamming_windowing(self, i_freqAxis, i_hammPar, i_bandPass, i_bandTrans, i_normFact=1.0, i_freq0 = 0.0):
-    
-        B = i_bandTrans * i_normFact
-        hamming_window = np.zeros(i_freqAxis.size)
-        f = abs(i_freqAxis - i_freq0) - i_bandPass * i_normFact
-        
-        for index in range(i_freqAxis.size):
-            
-            if f[index] <= 0.0:
-                hamming_window[index] = 1.0
-            elif f[index] >= B:
-                hamming_window[index] = 0.0
-            else:
-                hamming_window[index] = i_hammPar + (1 - i_hammPar) * np.cos(np.pi * f[index] / B)
-        
-        return hamming_window
-
-    def get_start_indices(number_of_looks, look_overlap, window_len, in_line_len):
-
-        extracted_freq_samples = window_len + (window_len - look_overlap) * (number_of_looks - 1)
-        start_offset = int(np.floor((1.0 - extracted_freq_samples) / 2))
-
-        look_start_indices = [0] * number_of_looks
-        look_end_indices = [0] * number_of_looks
-
-        for lookIdx in range(number_of_looks):
-            look_start_indices[lookIdx] = int((start_offset + (window_len - look_overlap) * lookIdx) % in_line_len)
-
-            look_end_indices[lookIdx] = int((look_start_indices[lookIdx] + window_len - 1) % in_line_len)
-
-        return look_start_indices
-    
-    def find_fft_size(desired_fft_size):
-
-        FFT_VALID_LENGTHS = [ 240, 256, 288, 320, 384, 480, 512, 576, 640, 720, 768, 960, 1024, 1152, 1300, 1400, 1584, 1800, 1950, 2080, 2464, 2560, 2880, 3072, 3564, 3750, 3822, 4096, 4400, 5000, 5760, 6144, 7840, 8100, 8400, 8640, 8736, 8820, 9072, 9216, 11520, 12288, 15360, 15552, 16000, 16384, 17280, 18000, 18480, 19008, 19440, 19500, 20000, 20580, 22400, 23760, 24576, 25920, 27648, 28800, 30720, 31104, 32000, 32768, 34560, 36000, 36864, 38400, 40000, 40960, 41472, 43200, 46080, 48000, 49152, 51200, 51840, 54000, 55296, 57600, 60000, 61440, 62208, 64000, 64800, 65536, 69120, 72000, 73728, 76800, 77760, 80000, 81920, 82944, 86400, 92160, 93312, 96000, 98304 ]
-
-        for size in FFT_VALID_LENGTHS:
-            if desired_fft_size <= size:
-                return size
-            
-        raise ValueError(f"No valid FFT size found for the desired FFT size {desired_fft_size}.")
-    
     def get_shrink_factor(self):
 
         range_filter = int(self.rel_burst is not None)
@@ -337,7 +306,7 @@ class ThermalNoise:
         FM_rate, az_mid_time = extract_FR_info(self.metadata_dict, range_times, self.rel_burst, self.is_grd, self.swath_id)
         FM_rate_mid = FM_rate[range_times.size // 2]
 
-        AR_vec = extract_AR_info(self.metadata_dict, az_mid_time, range_times, subswath=self.swath_id)
+        AR_vec = extract_AR_info(self.metadata_dict, az_mid_time, range_times, self.azimuth_steering_rate, orbit=self.orbit)
             
         # give back FM rate and DC rate evaluated at mid-range like IPF
         doppler_centroid_rate = AR_vec[range_times.size // 2]
@@ -363,14 +332,23 @@ class ThermalNoise:
 
         bw_in_samples = int(np.round(self.processing_bandwidth / delta_freq))
         if bw_in_samples == 0:
-            raise ValueError("Zero samples in bandwith")        
-        
-        window = hamming(bw_in_samples, alpha=self.slc_alpha_hamming)
+            raise ValueError("Zero samples in bandwith")
+
+        # window length is given by the look bandwidth, as in IPF
+        window_len = int(np.round(self.look_bandwidth / delta_freq))
+        window = hamming(window_len, alpha=self.azi_window_coefficient)
+
+        look_overlap = get_look_overlap_samples(
+            window_len=window_len,
+            bw_in_samples=bw_in_samples,
+            number_of_looks=self.number_of_looks
+        )
 
         look_start_indices = get_start_indices(
-            look_overlap=self.look_overlap,
-            window_len=len(window),
-            in_line_len=fft_length
+            look_overlap=look_overlap,
+            window_len=window_len,
+            in_line_len=fft_length,
+            number_of_looks=self.number_of_looks
         )
 
         # 2. Angle computation
@@ -396,7 +374,7 @@ class ThermalNoise:
         aap_data = np.interp(x=output_az_axis, xp=input_az_axis, fp=self.aap_gain)
         aap_data = np.fft.fftshift(aap_data)
 
-        data_spectra = 10 ** (aap_data / 20) # convert AAP from dB to linear scale
+        data_spectra = db_to_linear(aap_data, is_amplitude=True)
 
         # 4. Window normalization
 
@@ -404,14 +382,17 @@ class ThermalNoise:
             data_spectra=data_spectra,
             in_line_len=fft_length,
             window=window,
-            bw_in_samples=bw_in_samples
+            bw_in_samples=bw_in_samples,
+            look_start_indices=look_start_indices,
+            correct_spectra=self.apply_azi_ant_pattern
         )
 
         sum_window_sq_noise = update_window_noise_norm(
             data_spectra=data_spectra,
             window=window,
             look_start_indices=look_start_indices,
-            in_line_len=fft_length
+            in_line_len=fft_length,
+            correct_spectra=self.apply_azi_ant_pattern
         )
 
         # 5. Noise normalization factor computation
@@ -422,9 +403,21 @@ class ThermalNoise:
         noise_proc_gain = sum_window_sq_noise / bw_in_samples
         noise_norm_factor_all_looks = noise_proc_gain / window_norm_factor
 
-        self.noise_norm_factor = np.mean(noise_norm_factor_all_looks)
+        noise_azi_norm_factor = np.mean(noise_norm_factor_all_looks)
 
-        if self.is_grd and self.swath_id == "EW1":
-            self.noise_norm_factor *= 1.48      # TODO: empirical correction, where does this come from?
+        # 6. Range noise normalization factor (flat spectrum in range, as in IPF):
+        # window norm uses the exact bandwidth in samples, noise gain the rounded one
+
+        rg_fft_length = find_fft_size(self.samples_per_burst if self.samples_per_burst > 0 else self.rg_dim())
+        rg_delta_freq = self.sampling_freq_afterdecimation() / rg_fft_length
+        rg_bw_samples = self.rg_processing_bandwidth / rg_delta_freq
+        if int(np.round(rg_bw_samples)) == 0:
+            raise ValueError("Zero samples in range bandwith")
+
+        noise_rng_norm_factor = rg_bw_samples / int(np.round(rg_bw_samples))
+
+        denoise_logger.debug(f"Noise azimuth norm factor: {noise_azi_norm_factor}, range norm factor: {noise_rng_norm_factor}")
+
+        self.noise_norm_factor = noise_azi_norm_factor * noise_rng_norm_factor
 
         denoise_logger.debug(f"Noise norm factor: {self.noise_norm_factor}")

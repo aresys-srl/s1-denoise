@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!.venv/bin/python3
 
 import numpy as np
 import argparse
@@ -8,6 +8,7 @@ from pathlib import Path
 from math import nan
 
 from denoise.error_calculation import compare_noise, DN_VALUES
+from denoise.utils import linear_to_db
 
 OUTPUT_DIR = Path("compare-noise-plots")
 
@@ -63,8 +64,8 @@ def plot_cut_profiles(common_pixels, f_noise, f_denoise, cut_times_sec, product_
         noise_profile[noise_profile == 0] = nan
         denoise_profile[denoise_profile == 0] = nan
 
-        noise_db = 10 * np.log10(np.maximum(noise_profile, 1e-12))
-        denoise_db = 10 * np.log10(np.maximum(denoise_profile, 1e-12))
+        noise_db = linear_to_db(noise_profile)
+        denoise_db = linear_to_db(denoise_profile)
         diff_db = denoise_db - noise_db
 
         # Plot

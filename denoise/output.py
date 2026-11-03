@@ -21,29 +21,37 @@ from perseo_core.timing import PreciseDateTime
 from denoise.utils import iso_to_datetime, get_range_boundaries, ensure_list
 from denoise.logger import denoise_logger
 
+def get_lines_and_pixels(geolocation_info):
+    """Returns the sorted unique lines of the geolocation grid and the output pixels
+    (every 40 samples, up to the last pixel of the grid)"""
+
+    grid_points = geolocation_info['geolocationGridPointList']['geolocationGridPoint']
+
+    unique_lines = sorted({
+        int(d['line'])
+        for d in grid_points
+        if 'line' in d and str(d['line']).isdigit()
+    })
+
+    max_pixel = max({
+        int(d['pixel'])
+        for d in grid_points
+        if 'pixel' in d and str(d['pixel']).isdigit()
+    })
+
+    pixels = np.arange(0, max_pixel, 40)
+    if pixels[-1] != max_pixel:
+        pixels = np.append(pixels, max_pixel)
+
+    return unique_lines, pixels
+
 class NoiseRangeVector_SLC:
 
-    def __init__(self, burst_no, azimuth_start_time, noise_values, geolocation_info, incidence_angles, lut_value):
-        
+    def __init__(self, azimuth_start_time, line, pixels, noise_values, incidence_angles, lut_value):
+
         self.azimuthTime = azimuth_start_time
-
-        unique_lines = sorted({
-            int(d['line'])
-            for d in geolocation_info['geolocationGridPointList']['geolocationGridPoint']
-            if 'line' in d and str(d['line']).isdigit()
-        })
-
-        max_pixel = max({
-            int(d['pixel'])
-            for d in geolocation_info['geolocationGridPointList']['geolocationGridPoint']
-            if 'pixel' in d and str(d['pixel']).isdigit()
-        })
-
-        self.line = unique_lines[burst_no]
-        
-        self.pixels = np.arange(0, max_pixel, 40)
-        if self.pixels[-1] != max_pixel:
-            self.pixels = np.append(self.pixels, max_pixel)
+        self.line = line
+        self.pixels = pixels
         self.pixel_count = len(self.pixels)
 
         noise = noise_values / incidence_angles
@@ -77,6 +85,9 @@ class OutputNoiseVectors_SLC:
         self.ads_header = adsHeader
         self.noise_range_vectors = []  # list
 
+        geo_grid_lines = None
+        pixels = None
+
         for burst_values, noise_values in noiseRangeVectors.items():
             rel_burst = burst_values[0]
             start_az_time = burst_values[1]
@@ -84,11 +95,16 @@ class OutputNoiseVectors_SLC:
             geo_grid_info = noise_values[1]
             incidence_angles = noise_values[2]
             dn_value = noise_values[3]
-            noise_range_vec = NoiseRangeVector_SLC(rel_burst, 
-                                                   start_az_time, 
+
+            # the geolocation grid is the same for all the bursts of the swath
+            if geo_grid_lines is None:
+                geo_grid_lines, pixels = get_lines_and_pixels(geo_grid_info)
+
+            noise_range_vec = NoiseRangeVector_SLC(start_az_time,
+                                                   geo_grid_lines[rel_burst],
+                                                   pixels,
                                                    sim_noise,
-                                                   geo_grid_info, 
-                                                   incidence_angles, 
+                                                   incidence_angles,
                                                    dn_value)
             
             self.noise_range_vectors.append(noise_range_vec)
@@ -196,26 +212,32 @@ def extend_noise_grd(input_vectors, start_time, stop_time, max_lines):
 
     # create new azimuth time axis
     az_times_old = [iso_to_datetime(v[0]).sec85 for v in input_vectors.values()]
-    az_times_new = np.arange(iso_to_datetime(start_time).sec85, iso_to_datetime(stop_time).sec85, 1.0)
-    
-    if iso_to_datetime(stop_time) not in az_times_new:
-        az_times_new = np.append(az_times_new, iso_to_datetime(stop_time).sec85)
+    start_sec85 = iso_to_datetime(start_time).sec85
+    stop_sec85 = iso_to_datetime(stop_time).sec85
+    az_times_new = np.arange(start_sec85, stop_sec85, 1.0)
+
+    # add the stop time as last element, unless it is already there (compare in seconds, with tolerance)
+    if az_times_new.size == 0 or not np.isclose(az_times_new[-1], stop_sec85, rtol=0.0, atol=1e-6):
+        az_times_new = np.append(az_times_new, stop_sec85)
     
     tot_vec_out = len(az_times_new)
 
     target_len = max(len(input_vectors[j][1]) for j in range(len(input_vectors)))
 
+    # resample noise and incidence angles of each vector to the same length,
+    # without modifying the input vectors
+    x_new = np.linspace(0, 1, target_len)
+    resampled_vectors = []
     for j in range(len(input_vectors)):
         vec = list(input_vectors[j])  # make a mutable copy
-        x_new = np.linspace(0, 1, target_len)
         for idx in (1, 2):  # noise, incidence_angles
             y = np.array(vec[idx])
             x = np.linspace(0, 1, len(y))
             vec[idx] = np.interp(x_new, x, y).tolist()
-        input_vectors[j] = vec  # put back
+        resampled_vectors.append(vec)
 
-    noise_old = np.stack([v[1] for v in input_vectors.values()])
-    angles_old = np.stack([v[2] for v in input_vectors.values()])
+    noise_old = np.stack([v[1] for v in resampled_vectors])
+    angles_old = np.stack([v[2] for v in resampled_vectors])
 
     interp_noise = interp1d(
         az_times_old,
@@ -308,29 +330,3 @@ def write_to_xml(noise, output_path: Path, safe_path):
     denoise_logger.info(f"Written output to {output_file_path.resolve()}")
 
     return output_file_path
-    
-def match_denoise_files(original_noise_folder, denoise_folder):
-
-    # All files in original_noise_folder
-    noise_files = {
-        p.name: p
-        for p in original_noise_folder.iterdir()
-        if p.is_file()
-    }
-
-    # Files in denoise_folder
-    denoise_files = {
-        p.name.removeprefix("de"): p
-        for p in denoise_folder.iterdir()
-        if p.is_file()
-    }
-
-    # Keep only common filenames
-    common_names = noise_files.keys() & denoise_files.keys()
-
-    matches = [
-        (noise_files[name], denoise_files[name])
-        for name in common_names
-    ]
-
-    return matches

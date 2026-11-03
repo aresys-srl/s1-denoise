@@ -1,11 +1,11 @@
 [project]
-name = "denoise"
+name = "s1-denoise"
 description = "Noise vector reconstruction for Level 1 Sentinel-1 products"
 authors = [
   { name="Aresys S.R.L.", email="info@aresys.it" }
 ]
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
@@ -26,22 +26,29 @@ dependencies = [
     "perseo-core"
 ]
 
+[project.urls]
+Homepage = "https://github.com/aresys-srl/s1-denoise"
+Documentation = "https://opensource.aresys.it/s1-denoise/"
+Repository = "https://github.com/aresys-srl/s1-denoise"
+Issues = "https://github.com/aresys-srl/s1-denoise/issues"
+Changelog = "https://opensource.aresys.it/s1-denoise/API/changelog/"
+
 [project.scripts]
-denoise = "denoise.__main__:main"
+denoise = "s1_denoise.__main__:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]
-path = "denoise/__init__.py"
+path = "src/s1_denoise/__init__.py"
 
 [tool.hatch.build.targets.wheel]
-packages = ["denoise"]
+packages = ["src/s1_denoise"]
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "denoise/**/*.py",
+    "src/s1_denoise/**/*.py",
     "README.md",
     "LICENSE",
     "pyproject.toml",

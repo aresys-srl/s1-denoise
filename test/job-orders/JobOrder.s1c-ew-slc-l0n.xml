@@ -1,0 +1,81 @@
+<Ipf_Job_Order>
+	<Ipf_Conf>
+		<Processor_Name>S1_L1N_IPF</Processor_Name>
+		<Version>1.0.0</Version>
+		<Stdout_Log_Level>INFO</Stdout_Log_Level>
+		<Stderr_Log_Level>INFO</Stderr_Log_Level>
+		<Test>false</Test>
+		<Breakpoint_Enable>false</Breakpoint_Enable>
+		<Processing_Station>MTI</Processing_Station>
+		<List_of_Dynamic_Processing_Parameters count="1">
+			<Dynamic_Processing_Parameter>
+				<Name>Mission_Id</Name>
+				<Value>S1C</Value>
+			</Dynamic_Processing_Parameter>
+    	</List_of_Dynamic_Processing_Parameters>
+	</Ipf_Conf>
+	<List_of_Ipf_Procs count="1">
+		<Ipf_Proc>
+			<Task_Name>S1_L1N_IPF</Task_Name>
+			<Task_Version>1.0.0</Task_Version>
+			<List_of_Inputs count="7">			
+				<Input>
+					<File_Type>EW_SLC__1A</File_Type>
+					<File_Name_Type>Physical</File_Name_Type>
+					<List_of_File_Names count="1">
+						<File_Name>./input-s1c/S1C_EW_SLC__1ADH_20260226T125823_20260226T125925_006527_00D27D_ABEF.SAFE</File_Name>
+					</List_of_File_Names>
+				</Input>
+				<Input>
+					<File_Type>EW_RAW__0N</File_Type>
+					<File_Name_Type>Physical</File_Name_Type>
+					<List_of_File_Names count="1">
+						<File_Name>./input-s1c/S1C_EW_RAW__0NDH_20260226T125520_20260226T130108_006527_00D27D_75AA.SAFE</File_Name>
+					</List_of_File_Names>
+				</Input>
+				<Input>
+					<File_Type>EW_SLC__1A</File_Type>
+					<File_Name_Type>Physical</File_Name_Type>
+					<List_of_File_Names count="1">
+						<File_Name>./input-s1c/S1C_EW_SLC__1ADV_20260222T225359_20260222T225441_006474_00D0B5_B47D.SAFE</File_Name>
+					</List_of_File_Names>
+				</Input>
+				<Input>
+					<File_Type>EW_RAW__0N</File_Type>
+					<File_Name_Type>Physical</File_Name_Type>
+					<List_of_File_Names count="1">
+						<File_Name>./input-s1c/S1C_EW_RAW__0NDV_20260222T225400_20260222T225441_006474_00D0B5_D3A3.SAFE</File_Name>
+					</List_of_File_Names>
+				</Input>
+				<Input>
+					<File_Type>AUX_PP1</File_Type>
+					<File_Name_Type>Physical</File_Name_Type>
+					<List_of_File_Names count="1">
+						<File_Name>../test/aux-files/S1C_AUX_PP1_V20250427T000000_G20260203T152141.SAFE</File_Name>
+					</List_of_File_Names>
+				</Input>
+				<Input>
+					<File_Type>AUX_CAL</File_Type>
+					<File_Name_Type>Physical</File_Name_Type>
+					<List_of_File_Names count="1">
+						<File_Name>../test/aux-files/S1C_AUX_CAL_V20250427T000000_G20260212T132118.SAFE</File_Name>
+					</List_of_File_Names>
+				</Input>
+				<Input>
+					<File_Type>AUX_INS</File_Type>
+					<File_Name_Type>Physical</File_Name_Type>
+					<List_of_File_Names count="1">
+						<File_Name>../test/aux-files/S1C_AUX_INS_V20250224T000000_G20251015T082332.SAFE</File_Name>
+					</List_of_File_Names>
+				</Input>
+			</List_of_Inputs>
+			<List_of_Outputs count="1">
+				<Output>
+					<File_Type>DENOISE</File_Type>
+					<File_Name_Type>Directory</File_Name_Type>
+					<File_Name>./output</File_Name>
+				</Output>
+			</List_of_Outputs>
+		</Ipf_Proc>
+	</List_of_Ipf_Procs>
+</Ipf_Job_Order>

@@ -1,5 +1,12 @@
 #!.venv/bin/python3
 
+"""
+Compare a nominal and a reconstructed Sentinel-1 noise XML file and plot their differences.
+
+Prints the mean and maximum absolute errors in dB and saves to ``compare-noise-plots/`` a 2D map of the difference
+and range profiles at a few azimuth times.
+"""
+
 import numpy as np
 import argparse
 import sys
@@ -7,13 +14,35 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from math import nan
 
-from denoise.error_calculation import compare_noise, DN_VALUES
-from denoise.utils import linear_to_db
+from s1_denoise.error_calculation import compare_noise, DN_VALUES
+from s1_denoise.utils import linear_to_db
 
 OUTPUT_DIR = Path("compare-noise-plots")
 
 
 def plot_2d(common_pixels, common_times_sec, diff_db, out_name, colorbar, pol, subswath, prod_type):
+    """
+    Plot the 2D map of the noise difference and save it as ``whole_raster.png``.
+
+    Parameters
+    ----------
+    common_pixels : numpy.ndarray
+        Range pixel axis.
+    common_times_sec : numpy.ndarray
+        Azimuth time axis [s] from acquisition start.
+    diff_db : numpy.ndarray
+        Reconstructed minus nominal noise [dB], shape ``(len(common_times_sec), len(common_pixels))``.
+    out_name : str
+        Product name, shown as subtitle.
+    colorbar : float or None
+        Symmetric color scale limit [dB]; if None, the maximum absolute difference is used.
+    pol : str
+        Polarization.
+    subswath : str
+        Subswath, shown in the title for non-GRD products.
+    prod_type : str
+        Product type (``"GRD"`` or ``"SLC"``).
+    """
 
     plt.figure(figsize=(9, 7))
     if colorbar is not None:
@@ -49,7 +78,32 @@ def plot_2d(common_pixels, common_times_sec, diff_db, out_name, colorbar, pol, s
 
 def plot_cut_profiles(common_pixels, f_noise, f_denoise, cut_times_sec, product_name, dn, pol, subswath, prod_type):
     """
-    Plots 1D profiles (noise vs denoise and difference) at specified azimuth times.
+    Plot the 1D noise range profiles and their difference at the given azimuth times.
+
+    One figure per azimuth time is saved as ``cut_profile_<t>s.png``: the top panel shows nominal and reconstructed noise
+    in dB, the bottom panel their difference, where points with a jump larger than 0.01 dB between adjacent pixels
+    (subswath transitions) are masked.
+
+    Parameters
+    ----------
+    common_pixels : numpy.ndarray
+        Range pixel axis.
+    f_noise : scipy.interpolate.RegularGridInterpolator
+        Interpolator of the nominal noise over (azimuth time [s], range pixel).
+    f_denoise : scipy.interpolate.RegularGridInterpolator
+        Interpolator of the reconstructed noise over (azimuth time [s], range pixel).
+    cut_times_sec : numpy.ndarray
+        Azimuth times [s] of the cuts.
+    product_name : str
+        Product name, shown as title.
+    dn : float
+        Digital number scaling factor; noise values are divided by ``dn**2``.
+    pol : str
+        Polarization.
+    subswath : str
+        Subswath, shown in the title for SLC products.
+    prod_type : str
+        Product type (``"GRD"`` or ``"SLC"``).
     """
 
     for t_sec in cut_times_sec:
@@ -109,7 +163,17 @@ def plot_cut_profiles(common_pixels, f_noise, f_denoise, cut_times_sec, product_
 
 
 def main():
-    """CLI entry point"""
+    """
+    Run the command line interface.
+
+    Parses the two noise XML files, checks that subswath, product type and polarization (from the file names) match,
+    computes the errors and generates the plots.
+
+    Raises
+    ------
+    SystemExit
+        If the two files refer to different subswaths, product types or polarizations (exit code 128).
+    """
 
     parser = argparse.ArgumentParser(
         description="Compare two Sentinel-1 noise XML files (GRD or SLC)"

@@ -15,17 +15,17 @@ dist/
 *.log
 *.out
 *.csv
-*.png
+
+# Test data
+aux-files/
 test/batch*
 test/input*
 test/aux-files
 test/fonts
+test/*.png
 
 # Documentation
 *.pdf
-docs/fonts/
-docs/img/
-docs/template_images/
 
 # Sentinel-1 data & products
 *.SAFE
@@ -34,3 +34,7 @@ job-orders/*
 # Pipeline output
 output/
 compare-noise-plots/
+
+# Documentation site
+site/
+documentation*.zip

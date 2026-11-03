@@ -1,15 +1,50 @@
 name: Release
 
-# Only on push with tag starting with "v" (es. v1.0.0)
+# - push of a tag starting with "v" (e.g. v1.0.0): build and test the package, publish it to
+#   PyPI, create the GitHub release and publish the documentation to GitHub Pages
+# - push / pull request on main touching code, packaging or documentation: build and test the
+#   package and build the documentation, without publishing anything
+#   (path filters are not evaluated for tag pushes)
+# - manual run: build and test the package, build and publish the documentation
 on:
+  workflow_dispatch:
+
   push:
-    tags: ["v*"]
+    branches:
+      - main
+    tags:
+      - "v*"
+    paths:
+      - ".github/workflows/release.yml"
+      - "docs/**"
+      - "zensical.toml"
+      - "overrides/**"
+      - "tools/build_doc.py"
+      - "src/**"
+      - "pyproject.toml"
+      - "README.md"
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/release.yml"
+      - "docs/**"
+      - "zensical.toml"
+      - "overrides/**"
+      - "tools/build_doc.py"
+      - "src/**"
+      - "pyproject.toml"
+      - "README.md"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  # ---------------------------------------------------------------------------
+  # Package
+  # ---------------------------------------------------------------------------
+  build:
     runs-on: ubuntu-latest
     container:
       image: debian:bookworm
@@ -32,16 +67,157 @@ jobs:
       - name: Build wheel and sdist
         run: |
           python3 -m venv /tmp/venv
-          /tmp/venv/bin/pip install --upgrade pip build
+          /tmp/venv/bin/pip install --upgrade pip build twine
           /tmp/venv/bin/python -m build
           ls -l dist/
 
-      # Tag must be the same as __version__ in denoise/__init__.py
+      # Tag must be the same as __version__ in src/s1_denoise/__init__.py
       - name: Check tag matches package version
-        run: test -f "dist/denoise-${GITHUB_REF_NAME#v}-py3-none-any.whl"
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: test -f "dist/s1_denoise-${GITHUB_REF_NAME#v}-py3-none-any.whl"
 
-      # Create release on tag and attach wheel and sdist as assets
+      # Validate package metadata (e.g. README rendering) before uploading to PyPI
+      - name: Check distribution metadata
+        run: /tmp/venv/bin/twine check --strict dist/*
+
+      # Install the wheel with its dependencies in a clean virtualenv and run the CLI
+      - name: Test wheel installation
+        run: |
+          python3 -m venv /tmp/test-venv
+          /tmp/test-venv/bin/pip install --upgrade pip
+          /tmp/test-venv/bin/pip install dist/*.whl
+          cd /tmp
+          /tmp/test-venv/bin/denoise --version
+          /tmp/test-venv/bin/denoise --help
+          /tmp/test-venv/bin/python -c "import s1_denoise.cli, s1_denoise.noise_profiles"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 14
+
+  # Publish wheel and sdist to PyPI via Trusted Publishing (OIDC, no API token).
+  # Requires the "pypi" environment on GitHub and a matching trusted publisher
+  # configured on PyPI for project "s1-denoise" (workflow: release.yml, environment: pypi).
+  pypi:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    environment:
+      name: pypi
+      url: https://pypi.org/project/s1-denoise/
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+
+  # Create release on tag and attach wheel and sdist as assets,
+  # only once the package has been published to PyPI
+  github_release:
+    needs: pypi
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*
           generate_release_notes: true
+
+  # ---------------------------------------------------------------------------
+  # Documentation
+  # ---------------------------------------------------------------------------
+  docs_build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install zensical mkdocstrings-python
+
+      - name: Build docs
+        run: |
+          python tools/build_doc.py
+          ls -la site/
+
+      - name: Upload docs site
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-site
+          path: site/
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docs-archive
+          path: documentation*.zip
+          retention-days: 14
+
+  # Publish the documentation on release tags (after the package is on PyPI)
+  # or on manual runs
+  docs_publish:
+    needs: [docs_build, pypi]
+    if: |
+      always() && needs.docs_build.result == 'success' &&
+      (needs.pypi.result == 'success' || github.event_name == 'workflow_dispatch')
+
+    runs-on: ubuntu-latest
+
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    permissions:
+      pages: write
+      id-token: write
+
+    steps:
+      - name: Download docs site
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-site
+          path: site
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

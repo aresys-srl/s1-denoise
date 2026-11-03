@@ -1,0 +1,47 @@
+name: Release
+
+# Only on push with tag starting with "v" (es. v1.0.0)
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    container:
+      image: debian:bookworm
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Install system dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git ca-certificates python3 python3-venv python3-pip
+
+      # Download the source code of the repository
+      - uses: actions/checkout@v4
+
+      # Build wheel and sdist in isolated virtualenv
+      - name: Build wheel and sdist
+        run: |
+          python3 -m venv /tmp/venv
+          /tmp/venv/bin/pip install --upgrade pip build
+          /tmp/venv/bin/python -m build
+          ls -l dist/
+
+      # Tag must be the same as __version__ in denoise/__init__.py
+      - name: Check tag matches package version
+        run: test -f "dist/denoise-${GITHUB_REF_NAME#v}-py3-none-any.whl"
+
+      # Create release on tag e attach wheel and sdist as assets
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

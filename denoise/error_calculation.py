@@ -134,9 +134,10 @@ def compare_noise(noise_file, denoise_file, dn):
 
     diff_db = 10 * np.log10(np.maximum(np.abs(denoise), 1e-12)) - 10 * np.log10(np.maximum(np.abs(noise), 1e-12))
 
-    error = np.nanmean(np.abs(diff_db))
+    mae = np.nanmean(np.abs(diff_db))
+    max_err = np.nanmax(np.abs(diff_db))
 
-    return common_pixels, common_times_sec, diff_db, f1, f2, error
+    return common_pixels, common_times_sec, diff_db, f1, f2, mae, max_err
 
 
 def calculate_error(nominal_noise_filepath, denoise_filepath):
@@ -146,6 +147,6 @@ def calculate_error(nominal_noise_filepath, denoise_filepath):
     prod_type = product_name[7:10]
     dn = DN_VALUES.get((mode, prod_type))
 
-    common_pixels, common_times_sec, diff_db, f1, f2, mean_error = compare_noise(nominal_noise_filepath, denoise_filepath, dn)
+    common_pixels, common_times_sec, diff_db, f1, f2, mean_error, max_error = compare_noise(nominal_noise_filepath, denoise_filepath, dn)
 
-    return mean_error
+    return mean_error, max_error

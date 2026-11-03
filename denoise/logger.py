@@ -20,7 +20,7 @@ def setup_logger():
     """Set up a colorized logger with both file and console output, avoiding duplicate handlers."""
     
     # Check if the logger has already handlers attached
-    logger = logging.getLogger()
+    logger = logging.getLogger("denoise")
 
     # Only set up logging if no handlers are already attached
     if not logger.hasHandlers():
@@ -63,6 +63,8 @@ def setup_logger():
 
         logger.addHandler(console_handler)
         logger.addHandler(file_handler)
+
+        logger.setLevel(logging.INFO)
 
     return logger
 

@@ -13,6 +13,7 @@ for use in the denoising pipeline.
 from lxml import etree 
 from pathlib import Path
 import numpy as np
+import sys
 
 from denoise.logger import denoise_logger
 
@@ -59,7 +60,7 @@ class AuxiliaryFiles:
         # if no matching swath/polarisation is found
         if not self.calibration_parameters:
             denoise_logger.error(f"Error reading calibration file. Aborting...")
-            quit()
+            sys.exit(128)
     
     def read_from_aux_pp1(self):
         """Read from appropriate AUX_PP1 file"""
@@ -113,7 +114,7 @@ class AuxiliaryFiles:
         # if no matching swath/polarisation is found
         if not self.processing_parameters:
             denoise_logger.error(f"Error reading PP1 file. Aborting...")
-            quit()
+            sys.exit(128)
 
     def read_from_aux_ins(self):
         """Read from appropriate AUX_INS file"""
@@ -133,7 +134,7 @@ class AuxiliaryFiles:
         # if no matching swath/polarisation is found
         if not self.processing_parameters:
             denoise_logger.error(f"Error reading INS file. Aborting...")
-            quit()
+            sys.exit(128)
     
     def get_gain_from_pp1(self, product_id, subswath, pol):
         """Return windowCoefficient for given product_id, subswath and polarization from proper aux-pp1 file"""

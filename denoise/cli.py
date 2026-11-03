@@ -20,7 +20,7 @@ from denoise.noise_profiles import generate_noise_profiles, print_exec_time
 from denoise.__init__ import __version__
 from denoise.jo_parser import JobOrder, find_l0n
 from denoise.auxiliary_files import AuxiliaryFiles
-from denoise.output import write_to_xml, match_denoise_files
+from denoise.output import write_to_xml
 from denoise.error_calculation import calculate_error
 
 try:
@@ -38,7 +38,7 @@ def denoise_cli(job_order_path):
     """Generate noise profiles starting from L1 SAFE files."""
 
     if not job_order_path:
-        denoise_logger.critical("Missing JOB_ORDER_PATH argument (required).")
+        denoise_logger.critical("Missing JOB_ORDER_PATH argument (required)")
         sys.exit(128)
 
     jo = JobOrder(job_order_path)
@@ -82,13 +82,15 @@ def denoise_cli(job_order_path):
             nominal_noise = current_prod / "annotation/calibration" / (out_filepath.stem[2:] + ".xml")
             if nominal_noise.exists():
                 
-                error_on_denoise = calculate_error(nominal_noise_filepath=nominal_noise,
+                mae_on_denoise, max_err_on_denoise = calculate_error(nominal_noise_filepath=nominal_noise,
                                                    denoise_filepath=out_filepath)
 
-                if abs(error_on_denoise) < 1.0:
-                    denoise_logger.info(f"Mean absolute error on denoising: {error_on_denoise:.2e} dB")
+                if abs(mae_on_denoise) < 1.0:
+                    denoise_logger.info(f"Mean absolute error on denoising: {mae_on_denoise:.2e} dB")
                 else:
-                    denoise_logger.warning(f"High mean absolute error on denoising: {error_on_denoise:.2e} dB")
+                    denoise_logger.warning(f"High mean absolute error on denoising: {mae_on_denoise:.2e} dB")
+
+                denoise_logger.info(f"Maximum absolute error on denoising: {max_err_on_denoise:.2e} dB")
 
     denoise_logger.info("Denoising process terminated successfully")
 

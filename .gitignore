@@ -9,7 +9,9 @@ __pycache__/
 *.log
 *.tar
 *.xz
+*.gz
 *.png
+dist/
 test-data/
 input-for-denoise*/
 analysis-graphs*/

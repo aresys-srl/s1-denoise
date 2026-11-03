@@ -90,35 +90,25 @@ def read_noise_power_correction_from_annotation(metadata_dict, swath_id):
     
     data = metadata_dict['product']['generalAnnotation']['noiseList']['noise']
     mission_id = metadata_dict['product']['adsHeader']['missionId']
-    noise_power_correction = []
-    az_t = []
-    for element in data:
-        if element['swath'] == swath_id:
-            noise_power_correction.append(float(element['noisePowerCorrectionFactor']))
-            az_t.append(element['azimuthTime'])
 
-    if mission_id == "S1A":
+    filtered = [el for el in data if el['swath'] == swath_id]
+    noise_power_correction = np.array([float(el['noisePowerCorrectionFactor']) for el in filtered])
+    az_t = np.array([el['azimuthTime'] for el in filtered])
+
+    if mission_id in ["S1A", "S1B"]:
         if swath_id == "IW1":
-            # include preamble
-            final_noise_pwr = [noise_power_correction[0]]
-            final_times = [az_t[0]]
-
-            final_noise_pwr += noise_power_correction[1::2]
-            final_times += az_t[1::2]
-
-            # include postamble
-            final_noise_pwr.append(noise_power_correction[-1])
-            final_times.append(az_t[-1])
+            final_noise_pwr = np.concatenate([[noise_power_correction[0]], noise_power_correction[1::2], [noise_power_correction[-1]]])
+            final_times = np.concatenate([[az_t[0]], az_t[1::2], [az_t[-1]]])
         elif swath_id in ["IW2", "IW3"]:
-            final_noise_pwr = noise_power_correction[0::2]
-            final_noise_pwr.append(noise_power_correction[-1])
-            final_times = az_t[0::2]
-            final_times.append(az_t[-1])
+            final_noise_pwr = np.concatenate([noise_power_correction[0::2], [noise_power_correction[-1]]])
+            final_times = np.concatenate([az_t[0::2], [az_t[-1]]])
+        elif swath_id == "EW1":
+            final_noise_pwr = noise_power_correction[:-1]
+            final_times = az_t[:-1]
         else:
             final_times = az_t
             final_noise_pwr = noise_power_correction
     else:
-        # on S1C, EW2 annotation files have an extra entry
         if swath_id == "EW2":
             final_times = az_t[:-1]
             final_noise_pwr = noise_power_correction[:-1]
@@ -126,7 +116,7 @@ def read_noise_power_correction_from_annotation(metadata_dict, swath_id):
             final_times = az_t
             final_noise_pwr = noise_power_correction
     
-    return np.array(final_noise_pwr), np.array(convert_az_times(final_times))
+    return final_noise_pwr, convert_az_times(final_times)
 
 def read_elevation_pattern(metadata_dict, swath_id, az_t):
     "Create two lists of elevation pattern gain arrays and slant range time arrays"

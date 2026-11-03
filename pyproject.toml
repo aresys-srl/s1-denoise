@@ -8,22 +8,24 @@ readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Operating System :: OS Independent",
+    "Operating System :: POSIX :: Linux",
 ]
 dynamic = ["version"]
-license = { file = "LICENSE.txt" }
+license = { file = "LICENSE" }
 dependencies = [
-    "arepyextras-eo-products",
-    "matplotlib",
-    "tabulate",
-    "rasterio",
-    "xmltodict",
-    "colorlog",
-    "scipy",
-    "pandas",
-    "seaborn",
+    # private wheels - installed separately by install.sh:
+    #   arepytools
+    #   arepyextras-eo-products
     "click",
-    "numpydantic"
+    "colorlog",
+    "lxml",
+    "matplotlib",
+    "numpy",
+    "Pillow",
+    "rasterio",
+    "scipy",
+    "tabulate",
+    "xmltodict",
 ]
 
 [project.scripts]
@@ -36,6 +38,8 @@ build-backend = "hatchling.build"
 [tool.hatch.version]
 path = "denoise/__init__.py"
 
-[project.optional-dependencies]
-dev = ["nox", "ruff", "pylint"]
-cli = ["click"]
+[tool.hatch.build.targets.wheel]
+packages = ["denoise"]
+
+[tool.hatch.build.targets.wheel.include]
+patterns = ["denoise/aux_rules/**"]

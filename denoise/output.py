@@ -56,17 +56,16 @@ class NoiseRangeVector_SLC:
 
 class NoiseRangeVector_GRD:
 
-    def __init__(self, start_az_time, noise_values, incidence_angles, line_no, pixels_array, lut_value):
-    
+    def __init__(self, start_az_time, noise_values, incidence_angles, line_no, pixels_array, sample_pixel_coords, lut_value):
+
         self.azimuthTime = start_az_time
-        self.line = line_no        
+        self.line = line_no
         self.pixels = pixels_array
         self.pixel_count = len(self.pixels)
 
         noise = np.array(noise_values) / np.array(incidence_angles)
-
         noise *= lut_value ** 2
-        noise = np.interp(self.pixels, np.arange(len(noise)), noise)
+        noise = np.interp(np.array(self.pixels, dtype=float), sample_pixel_coords, noise)
 
         self.noise_values = noise
         self.noiseRangeLut_count = len(self.noise_values)
@@ -101,79 +100,77 @@ class OutputNoiseVectors_GRD:
     def __init__(self, adsHeader: dict, swath_merges, noiseRangeVectors, dn_value, tot_vec_out):
 
         self.ads_header = adsHeader
-        self.noise_range_vectors = []  # list
+        self.noise_range_vectors = []
 
+        # Collect unique subswath identifiers preserving their order
         subswaths = list(dict.fromkeys(key[1] for key in noiseRangeVectors))
 
+        # Determine the total number of azimuth lines across all swath boundaries
         max_lines = max(
             int(d['lastAzimuthLine'])
             for p in swath_merges
             for d in ensure_list(p['swathBoundsList']['swathBounds'])
         )
 
-        noise_range_vectors = {}
+        # Extend each subswath's noise vectors to cover the full azimuth extent
+        # Burst vectors are re-indexed sequentially and extrapolated to fill any gaps beyond the first/last burst up to the scene boundaries
+        subswath_extended = {}
+        for subswath in subswaths:
+            burst_indices = sorted(k[0] for k in noiseRangeVectors if k[1] == subswath)
+            sw_vectors = {
+                j: noiseRangeVectors[(burst_no, subswath)]
+                for j, burst_no in enumerate(burst_indices)
+            }
+            subswath_extended[subswath] = extend_noise_grd(
+                sw_vectors, self.ads_header['startTime'], self.ads_header['stopTime'], max_lines
+            )
 
-        burst_max = min(
-            max(first for (first, second2) in noiseRangeVectors if second2 == second)
-            for second in {s for (_, s) in noiseRangeVectors}
-        )
+        # Step 2: for each azimuth time step, concatenate subswaths in range.
+        # All subswaths share the same number of time steps after the extension above.
+        tot_vec = len(next(iter(subswath_extended.values())))
 
-        pixels_dic = {}
+        for i in range(tot_vec):
+            # Azimuth time and line number are taken from the first subswath (same for all)
+            az_time = subswath_extended[subswaths[0]][i][0]
+            line_no  = subswath_extended[subswaths[0]][i][3]
 
-        for burst_no in range(burst_max):
-
-            # concatenate noise values throughout subswaths
             noise = []
             incidence_angles = []
-            start_az_times = []
+            sample_pixel_coords = []
             pixels = []
-
-            # auxiliary variables to consider overlap in noise concatenation
             last_prec = None
-            overlap = 0
+            first_prec = None
 
             for subswath in subswaths:
-                if (burst_no, subswath) in noiseRangeVectors:
+                noise_sw   = subswath_extended[subswath][i][1]
+                angles_sw  = subswath_extended[subswath][i][2]
 
-                    az_time = noiseRangeVectors[(burst_no, subswath)][0]                    
-                    start_az_times.append(az_time)
-                    first, last = get_range_boundaries(swath_merges=swath_merges, subswath=subswath, az_time=az_time)
+                # Retrieve the pixel range covered by this subswath at the current azimuth time
+                first, last = get_range_boundaries(swath_merges=swath_merges, subswath=subswath, az_time=az_time)
 
-                    if last_prec is None:
-                        overlap = 0
-                    else:
-                        overlap = abs(first - last_prec)
-                        noise = noise[:-overlap]
-                        incidence_angles = incidence_angles[:-overlap]
-                    
-                    pixels.append(first)
-                    pixels.append(last)                    
+                # Remove samples from the previous subswath that fall in the overlap region
+                if last_prec is not None:
+                    overlap_pixels = max(0, last_prec - first + 1)
+                    if overlap_pixels > 0:
+                        prev_pixel_width = last_prec - first_prec + 1
+                        overlap_samples = round(overlap_pixels * len(noise) / prev_pixel_width)
+                        noise = noise[:-overlap_samples]
+                        incidence_angles = incidence_angles[:-overlap_samples]
+                        sample_pixel_coords = sample_pixel_coords[:-overlap_samples]
 
-                    noise.extend(noiseRangeVectors[(burst_no, subswath)][1])
-                    incidence_angles.extend(noiseRangeVectors[(burst_no, subswath)][2])
+                # Append this subswath's samples, mapping them uniformly across its pixel range
+                pixels.extend([first, last])
+                n_samples = len(noise_sw)
+                sample_pixel_coords.extend(np.linspace(first, last, n_samples).tolist())
+                noise.extend(list(noise_sw))
+                incidence_angles.extend(list(angles_sw))
 
-                    last_prec = last
+                first_prec = first
+                last_prec = last
 
-                else:
-                    pass
-    
-            noise_range_vectors.update({
-                burst_no: (min(start_az_times), noise, incidence_angles)
-            })
-
-            pixels_dic.update({
-                min(start_az_times): pixels
-            })
-
-        # extend noise range values on 1-second spaced azimuth times 
-        noise_range_vectors = extend_noise_grd(noise_range_vectors, tot_vec_out, self.ads_header['startTime'], self.ads_header['stopTime'], max_lines)
-        
-        for elem in noise_range_vectors.values():
-            start_az_time, noise, incidence_angles, line_numbers = elem[0], elem[1], elem[2], elem[3]
-            closest_az_time = min(pixels_dic.keys(),
-                                  key=lambda k: abs(PreciseDateTime.fromisoformat(k) - PreciseDateTime.fromisoformat(start_az_time)))
-            pixel_line = calculate_pixel_line(pixels_dic[closest_az_time])
-            noise_range_vec = NoiseRangeVector_GRD(start_az_time, noise, incidence_angles, line_numbers, pixel_line, dn_value)            
+            # Build the merged noise range vector for this azimuth line and store it
+            pixel_line = calculate_pixel_line(pixels)
+            noise_range_vec = NoiseRangeVector_GRD(az_time, noise, incidence_angles, line_no, pixel_line, sample_pixel_coords, dn_value)
             self.noise_range_vectors.append(noise_range_vec)
 
         self.vector_count = len(self.noise_range_vectors)
@@ -193,7 +190,7 @@ def calculate_pixel_line(pixel_bound_list):
 
     return pixel_string
 
-def extend_noise_grd(input_vectors, tot_vec_out, start_time, stop_time, max_lines):
+def extend_noise_grd(input_vectors, start_time, stop_time, max_lines):
 
     output_vectors = dict()
 
@@ -210,13 +207,11 @@ def extend_noise_grd(input_vectors, tot_vec_out, start_time, stop_time, max_line
 
     for j in range(len(input_vectors)):
         vec = list(input_vectors[j])  # make a mutable copy
-        y1 = np.array(vec[1])
-        y2 = np.array(vec[2])
-        x1 = np.linspace(0, 1, len(y1))
-        x2 = np.linspace(0, 1, len(y2))
         x_new = np.linspace(0, 1, target_len)
-        vec[1] = np.interp(x_new, x1, y1).tolist()
-        vec[2] = np.interp(x_new, x2, y2).tolist()
+        for idx in (1, 2):  # noise, incidence_angles
+            y = np.array(vec[idx])
+            x = np.linspace(0, 1, len(y))
+            vec[idx] = np.interp(x_new, x, y).tolist()
         input_vectors[j] = vec  # put back
 
     noise_old = np.stack([v[1] for v in input_vectors.values()])
@@ -227,7 +222,7 @@ def extend_noise_grd(input_vectors, tot_vec_out, start_time, stop_time, max_line
         noise_old,
         axis=0,
         bounds_error=False,
-        fill_value="extrapolate"
+        fill_value=(noise_old[0], noise_old[-1])
     )
 
     interp_angles = interp1d(
@@ -235,7 +230,7 @@ def extend_noise_grd(input_vectors, tot_vec_out, start_time, stop_time, max_line
         angles_old,
         axis=0,
         bounds_error=False,
-        fill_value="extrapolate"
+        fill_value=(angles_old[0], angles_old[-1])
     )
     
     noise_new = interp_noise(az_times_new)
@@ -316,14 +311,14 @@ def write_to_xml(noise, output_path: Path, safe_path):
     
 def match_denoise_files(original_noise_folder, denoise_folder):
 
-    # All files in folder_a (original names)
+    # All files in original_noise_folder
     noise_files = {
         p.name: p
         for p in original_noise_folder.iterdir()
         if p.is_file()
     }
 
-    # Files in folder_b, stripping the "de" prefix
+    # Files in denoise_folder
     denoise_files = {
         p.name.removeprefix("de"): p
         for p in denoise_folder.iterdir()

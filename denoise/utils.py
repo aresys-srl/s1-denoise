@@ -6,7 +6,7 @@ General-purpose utility module for the denoising pipeline.
 
 Provides helpers for ISO timestamp conversion, swath range boundary lookup,
 slant-to-ground and ground-to-slant range coordinate conversion, Z-score-based
-outlier removal for RFI detection in noise power series, and list normalisation.
+outlier removal for noise pulse outlier detection in noise power series, and list normalisation.
 """
 
 import numpy as np
@@ -14,7 +14,7 @@ from scipy.constants import speed_of_light
 
 from arepytools.timing.precisedatetime import PreciseDateTime
 
-from denoise.__init__ import RFI_DETECTION_CONSTANT
+from denoise.__init__ import OUTLIER_DETECTION_CONSTANT
 
 def iso_to_datetime(iso_str: str) -> PreciseDateTime:
     """Convert ISO timestamp string to PreciseDateTime object."""
@@ -66,14 +66,14 @@ def ground2slant(start_az_time, gr_array, coordinate_conversions):
 
     return sr_array
 
-def slant2ground(start_az_time, sim_noise_sr, inc_angle_sr, coordinate_conversions, range_sampling_rate):
+def slant2ground(start_az_time, sim_noise_sr, inc_angle_sr, coordinate_conversions, sr_distances):
     """
-    Convert slant-range data to ground-range while keeping output size same as input.
+    Convert slant-range data to ground-range using actual SR distances (in metres).
+    sr_distances must match the sample axis of sim_noise_sr and inc_angle_sr.
     """
     sim_noise_sr = np.asarray(sim_noise_sr, dtype=float)
     inc_angle_sr = np.asarray(inc_angle_sr, dtype=float)
-
-    dr = speed_of_light / (2 * range_sampling_rate) 
+    sr_distances = np.asarray(sr_distances, dtype=float)
 
     # select closest SRGR polynomial in azimuth
     cc = min(
@@ -81,28 +81,23 @@ def slant2ground(start_az_time, sim_noise_sr, inc_angle_sr, coordinate_conversio
         key=lambda cc: abs(iso_to_datetime(cc["azimuthTime"]) - iso_to_datetime(start_az_time))
     )
 
-    sr0 = cc["sr0"]
-    gr0 = cc["gr0"]
+    sr0 = float(cc["sr0"])
+    gr0 = float(cc["gr0"])
     sr_to_gr_polynomial = cc["srgrCoeffs"]
 
-    # slant range axis (meters)
-    pixels = np.arange(sim_noise_sr.size)
-    sr = sr0 + pixels * dr
-
-    # from SR to GR
-    sr_norm = sr - sr0
+    # from SR distances to GR distances (metres)
+    sr_norm = sr_distances - sr0
     gr = gr0 + np.polyval(sr_to_gr_polynomial[::-1], sr_norm)
 
-    # generate GR grid same size as input
+    # resample onto a uniform GR grid of same length
     gr_grid = np.linspace(gr.min(), gr.max(), sim_noise_sr.size)
 
-    # interpolate
     sim_noise_gr = np.interp(gr_grid, gr, sim_noise_sr, left=np.nan, right=np.nan)
     inc_angle_gr = np.interp(gr_grid, gr, inc_angle_sr, left=np.nan, right=np.nan)
 
     return sim_noise_gr, inc_angle_gr
 
-def remove_outliers(x, y, alpha=RFI_DETECTION_CONSTANT):
+def remove_outliers(x, y, alpha=OUTLIER_DETECTION_CONSTANT):
     """
     Removes outliers in y using Z-score (sigma-clipping), and removes corresponding x values.
 

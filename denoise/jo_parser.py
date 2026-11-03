@@ -11,6 +11,7 @@ L1 products with their corresponding L0N files.
 """
  
 import xmltodict
+import sys
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -79,7 +80,7 @@ class JobOrder:
             denoise_logger.info(f"AUX_PP1: {self.aux_pp1_filepath}")
         else:
             denoise_logger.error("Missing AUX_PP1 file in Job Order. Aborting...")
-            quit()
+            sys.exit(128)
 
         cal_list = [elem for elem in self.input_files if elem['File_Type'] == "AUX_CAL"]
         if len(cal_list) != 0:
@@ -87,7 +88,7 @@ class JobOrder:
             denoise_logger.info(f"AUX_CAL: {self.aux_cal_filepath}")
         else:
             denoise_logger.error("Missing AUX_CAL file in Job Order. Aborting...")
-            quit()
+            sys.exit(128)
 
         ins_list = [elem for elem in self.input_files if elem['File_Type'] == "AUX_INS"]
         if len(ins_list) != 0:
@@ -95,17 +96,50 @@ class JobOrder:
             denoise_logger.info(f"AUX_INS: {self.aux_ins_filepath}")
         else:
             denoise_logger.error("Missing AUX_INS file in Job Order. Aborting...")
-            quit()
+            sys.exit(128)
 
         # output filepath
         self.output_path = Path(ipf_proc['List_of_Outputs']['Output'][0]['File_Name'][0])
+        # the processor must not be able to write inside input folders
+        input_dirs = [Path(f['List_of_File_Names']['File_Name'][0]) for f in self.input_files]
+        if any(
+            self.output_path == input_dir or self.output_path.is_relative_to(input_dir)
+            for input_dir in input_dirs
+        ):
+            denoise_logger.error("Cannot write results in input folders. Aborting...")
+            sys.exit(128)
 
+        self.check_input_files_exist()
         self.check_manifest_file()
+
+    def check_input_files_exist(self):
+        missing = []
+
+        for f in self.input_l0n_files:
+            if not f.exists():
+                missing.append(f)
+
+        for f in [self.aux_pp1_filepath, self.aux_cal_filepath, self.aux_ins_filepath]:
+            if not f.exists():
+                missing.append(f)
+
+        if missing:
+            for f in missing:
+                denoise_logger.error(f"Input file not found: {f}")
+            sys.exit(128)
 
     def check_manifest_file(self):
     
         for prod in self.input_files_to_process:
-            manifest_path = Path(prod['List_of_File_Names']['File_Name'][0]) / "manifest.safe"
+            prod_name = Path(prod['List_of_File_Names']['File_Name'][0])
+            manifest_path = prod_name / "manifest.safe"
+
+            if not prod_name.exists():
+                denoise_logger.error(f"Input product not found: {prod_name}. Aborting...")
+                sys.exit(128)
+            if not manifest_path.exists():
+                denoise_logger.error(f"Manifest file not found: {manifest_path}. Aborting...")
+                sys.exit(128)
 
             tree = ET.parse(manifest_path)
             root = tree.getroot()
@@ -117,16 +151,19 @@ class JobOrder:
             for res in root.findall(".//safe:resource", ns):
                 if res.get("role") == "AUX_INS":
                     manifest_ins = Path(res.get("name")).name
-                    check_coherence(manifest_ins, self.aux_ins_filepath.name)
+                    self.check_coherence(manifest_ins, self.aux_ins_filepath.name, prod_name.stem)
                 elif res.get("role") == "AUX_PP1":
                     manifest_pp1 = Path(res.get("name")).name
-                    check_coherence(manifest_pp1, self.aux_pp1_filepath.name)
+                    self.check_coherence(manifest_pp1, self.aux_pp1_filepath.name, prod_name.stem)
                 elif res.get("role") == "AUX_CAL":
                     manifest_cal = Path(res.get("name")).name
-                    check_coherence(manifest_cal, self.aux_cal_filepath.name)
+                    self.check_coherence(manifest_cal, self.aux_cal_filepath.name, prod_name.stem)
 
         return manifest_ins, manifest_pp1, manifest_cal
-
+    
+    def check_coherence(self, manifest, jo_aux_file, prod):
+        if manifest != jo_aux_file:
+            denoise_logger.warning(f"Using {jo_aux_file} for {prod}, while input data was processed with {manifest}. Calculated error could not be precise.")
 
 def find_l0n(l1a: Path, l0n_list) -> Path | None:
 
@@ -139,7 +176,3 @@ def find_l0n(l1a: Path, l0n_list) -> Path | None:
         if orbit_number in l0n_name and datatake_id in l0n_name:
             return item # give back first match
     return None
-
-def check_coherence(manifest_ins, jo_aux_ins):
-    if manifest_ins != jo_aux_ins:
-        denoise_logger.warning(f"Using {manifest_ins[4:11]}: {jo_aux_ins}, while input data was processed with {manifest_ins}. Calculated error could not be precise.")

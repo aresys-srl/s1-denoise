@@ -188,12 +188,12 @@ class ThermalNoise:
             noise_az_t                      = noise_power_from_l0.get((self.swath_id,self.polarization))[0]
             noise_power_correction_factors  = noise_power_from_l0.get((self.swath_id,self.polarization))[1]
 
-        # RFI handling
-        self.noise_az_t, self.noise_power_correction_factors, self.rfi_detected = remove_outliers(noise_az_t, noise_power_correction_factors)
+        # discard noise pulses
+        self.noise_az_t, self.noise_power_correction_factors, self.outlier_detected = remove_outliers(noise_az_t, noise_power_correction_factors)
 
-        for ind in range(len(self.rfi_detected)):
-            formatted = self.rfi_detected[ind][1].isoformat(timespec="microseconds").rstrip("Z")
-            denoise_logger.warning(f"RFI detected at azimuth time {formatted}, discarding noise power correction factor")
+        for ind in range(len(self.outlier_detected)):
+            formatted = self.outlier_detected[ind][1].isoformat(timespec="microseconds").rstrip("Z")
+            denoise_logger.warning(f"Noise pulse at azimuth time {formatted} discarded")
 
     def noise_power_computation(self, azimuth_T):
 
@@ -373,7 +373,6 @@ class ThermalNoise:
             in_line_len=fft_length
         )
 
-
         # 2. Angle computation
 
         angle_incr_rad = LAMBDA / (2 * np.mean(self.velocities))
@@ -426,6 +425,6 @@ class ThermalNoise:
         self.noise_norm_factor = np.mean(noise_norm_factor_all_looks)
 
         if self.is_grd and self.swath_id == "EW1":
-            self.noise_norm_factor *= 1.48      # TODO: where does this come from?
+            self.noise_norm_factor *= 1.48      # TODO: empirical correction, where does this come from?
 
         denoise_logger.debug(f"Noise norm factor: {self.noise_norm_factor}")

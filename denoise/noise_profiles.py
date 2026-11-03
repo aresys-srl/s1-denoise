@@ -26,7 +26,7 @@ from denoise.thermal_noise import ThermalNoise
 from denoise.auxiliary_files import AuxiliaryFiles
 from denoise.output import OutputNoiseVectors_SLC, OutputNoiseVectors_GRD
 from denoise.l0_noise_power_calculation import get_noise_pwr_from_l0n
-from denoise.utils import ensure_list
+from denoise.utils import ensure_list, slant2ground
 
 ERROR_THRESHOLD = 0.1
 
@@ -187,8 +187,13 @@ def grd_processing(safe, aux_files, dn_value, noise_power_correction):
                 
                 # slant range simulated noise
                 sim_noise, incidence_angles = thermal_noise.compute_simulated_noise(az_t0)
-                
+
+                # convert from slant range to ground range using actual SR distances
                 az_t0_string = az_t0.isoformat(sep="T", timespec="microseconds").rstrip("Z")
+                sim_noise, incidence_angles = slant2ground(
+                    az_t0_string, sim_noise, incidence_angles,
+                    coordinate_conversions, thermal_noise.range_distances
+                )
 
                 sim_noises.update({
                     (index, subswath): (az_t0_string, sim_noise, incidence_angles)

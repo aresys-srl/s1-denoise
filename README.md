@@ -1,50 +1,141 @@
-# Level 1 Noise Processor
+# Sentinel-1 Level 1 Noise Processor
 
-The Level 1 Noise Processor calculates noise vectors from Level 1 annotations and outputs a file analogous to the annotation noise files.
+#### Thermal noise vector reconstruction for Sentinel-1 Level 1 products
 
-Such processor will process all Level 1 annotation products pointed by the Job Order and create a CSV file for further analysis called `denoise_errors_TIMESTAMP.csv`, ready for import in Excel if needed.
+The S1 L1N Processor reconstructs the thermal noise range vectors for Sentinel-1 IW and EW products (both SLC and GRD) and writes them to output XML files that follow the standard Sentinel-1 annotation format. The reconstructed vectors can then be compared against the nominal noise annotations embedded in the SAFE product to assess noise estimation quality.
 
-Optionally, if a Level 0 Noise product folder is associated with a Level 1 annotation product folder in the Job Order, the processor derives the noise power correction values from the Level 0 data rather than reading them directly from the annotation files. 
+For each processed channel the processor:
 
-In both cases, a Z-method test is performed on noise power correction values to filter out RFIs.
+1. reads acquisition geometry and calibration data from auxiliary files (PP1, CAL, INS);
+2. models the thermal noise using range spread loss, elevation antenna pattern, and calibration LUT;
+3. optionally refines the noise power correction using an associated Level 0 Noise (L0N) product, applying a Z-score outlier filter to remove spurious noise pulses;
+4. for GRD products, handles sub-swath separation, per-subswath noise reconstruction and cross-subswath merging (see [Sub-swath merging](#sub-swath-merging));
+5. writes the output noise XML files and, if nominal noise annotations are present in the SAFE product, reports the Mean Absolute Error (MAE) and maximum absolute error in dB.
 
-You can plot results using 
+---
+
+## Installation
+
+The processor can be deployed as a **Docker image** or installed directly as a **Python package**.
+
+### Option 1 — Docker image
+
+The Docker image bundles all dependencies and requires no Python environment on the host. A pre-built image is distributed as part of the official release package.
+
+To load the pre-built image:
+
 ```bash
-./scripts/noise_compare.py <noise_xml_filepath> <denoise_xml_filepath> --colorbar 0.01
+docker load -i s1_l1n_processor_<version>.tar.gz
 ```
-where the `--colorbar` argument sets the symmetric boundary values for the colorbar in the 2D plot.
 
-## How to use
+To build the image locally, pass the desired version tag to the build script:
 
-The L1N Processor can be operated as a Docker container or it can be run as a stand-alone Python package. A Docker image is always provided as part of the official release package.
-
-The first option is preferred as it simplifies the installation procedure and minimizes the dependency of the error processor on the host machine.
-
-### Option 1: Python package
-
-Install the package with 
 ```bash
-pip install -e .[dev,cli]
-```
-and launch the processor with the command
-```bash 
-denoise "/path/to/job/order"
+./build_docker.sh 1.0.1
 ```
 
-Check other processing options with
+This produces a Docker image named `s1_l1n_processor:1.0.1`.
+
+Run the processor with:
+
+```bash
+docker run --rm \
+  --volume /path/to/data:/path/to/data \
+  s1_l1n_processor:1.0.1 "/path/to/job/order.xml"
+```
+
+The `--volume` flag must expose every path referenced inside the Job Order file (input products, auxiliary files, output directory) to the container.
+
+### Option 2 — Python package
+
+**Requirements:** Linux x86_64, Python ≥ 3.8, pip, `libgomp1` (OpenMP runtime).
+
+To install `libgomp1` if not already present:
+
+```bash
+sudo apt-get install libgomp1
+```
+
+> The `Sentinel1L0ImportQC` binary is only available for Linux x86_64. The Python wheel itself is platform-independent, but the full processor only runs on Linux.
+
+The release archive contains the following layout:
+
+```
+denoise-<version>/
+├── denoise-<version>-py3-none-linux_x86_64.whl
+├── wheels/
+│   ├── arepytools-<version>-py3-none-any.whl
+│   └── arepyextras_eo_products-<version>-py3-none-any.whl
+├── bin/
+│   └── Sentinel1L0ImportQC
+└── install.sh
+```
+
+Run the install script from the archive root:
+
+```bash
+chmod +x install.sh
+./install.sh
+```
+
+The script creates a virtual environment at `~/.local/share/denoise/env`, installs all dependencies there, copies the `Sentinel1L0ImportQC` binary to `~/.local/bin/`, and adds a `denoise` symlink to `~/.local/bin/` so the command is available without activating the virtual environment. The archive can be deleted after installation.
+
+After installation, set the following environment variable so that `denoise` can locate the binary:
+
+```bash
+export S1_L0IMPORTQC_PATH="$HOME/.local/bin/Sentinel1L0ImportQC"
+```
+
+To make it permanent, add the line above to your `~/.bashrc`.
+
+---
+
+## Usage
+
+The processor is driven by a **Job Order XML file** that specifies input products, auxiliary files, and the output path. Both the Docker image and the Python package expose the same `denoise` CLI command.
+
+```bash
+denoise "/path/to/job/order.xml"
+```
+
+The processor reads each L1 SAFE product listed in the Job Order, generates the noise profiles, and writes the output XML files to the configured output directory. If nominal noise annotations are found inside the SAFE product, the MAE against them is logged automatically.
+
+For all available options:
+
 ```bash
 denoise --help
 ```
 
-### Option 2: Docker image
+### Job Order structure
 
-Build the Docker image with `build_docker.sh` script and launch the processor with
+The Job Order is an XML file that configures:
+
+| Field | Description |
+|---|---|
+| Input L1 SAFE products | One or more Sentinel-1 SAFE folders to process |
+| Input L0N products (optional) | Associated Level 0 Noise products for refined power correction |
+| Auxiliary files | AUX_PP1, AUX_CAL, AUX_INS product paths |
+| Output path | Directory where output XML files are written |
+| Log level | Verbosity of the processor log |
+
+A sample Job Order file is provided in the repository root (`JobOrder.template.xml`).
+
+---
+
+## Visualisation
+
+To visually compare the original noise annotation with the reconstructed one:
+
 ```bash
-docker run --rm --volume $(pwd):$(pwd) -w $(pwd) s1_l1n_processor:1.0.0 "/path/to/job/order"
+./scripts/noise_compare.py <noise_xml_filepath> <denoise_xml_filepath> --colorbar 0.01
 ```
+
+The `--colorbar` argument sets the symmetric boundary (in dB) for the 2D difference plot colorbar.
+
+---
 
 ## Current status
 
-The current quality of the noise vector reconstruction is displayed below, where the processor analyzed almost 240 annotation files and aggregated the results.
+The chart below summarises processor quality over approximately 240 annotation files.
 
-![alt text](./current_status.png)
+![Current status](./current_status.png)

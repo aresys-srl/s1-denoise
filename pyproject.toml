@@ -1,6 +1,6 @@
 [project]
 name = "s1-denoise"
-description = "Noise vector reconstruction for Level 1 Sentinel-1 products"
+description = "Thermal noise vector reconstruction for Sentinel-1 Level 1 products"
 authors = [
   { name="Aresys S.R.L.", email="info@aresys.it" }
 ]

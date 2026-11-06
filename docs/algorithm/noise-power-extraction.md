@@ -32,7 +32,9 @@ When a Level 0 Noise (L0N) product is provided, the noise power is extracted fro
     - the last rank echo of an EW1 sequence is removed for S1A/B, since nadir returns might be present;
     - rank echoes are filtered in an alternating pattern for S1A/B IW products, since odd-numbered measurements are
       biased by previous calibration pulses;
-    - rank echo measurements for EW2 are replaced with those derived from EW3, for all Sentinel-1 units.
+    - rank echo measurements for EW2 are replaced with those derived from EW3, for all Sentinel-1 units. If EW3 is
+      not available, the EW2 measurements are kept; if the two sequences have different lengths, only the overlapping
+      measurements are replaced. A warning is issued in both cases.
 
 The extracted noise power then goes through the same [outlier rejection](noise-pulse-discard.md) applied to the noise
 power annotated in L1 products.

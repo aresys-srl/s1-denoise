@@ -15,10 +15,11 @@ output path. A template is provided in the repository
 The processor reads every file path given in the Job Order and checks that it is reachable from the current working
 directory. In addition:
 
-- the AUX files provided by the user are compared with those used to generate each input L1 product: if they differ,
-  a warning is issued, but processing continues;
+- the AUX files provided by the user are compared with those referenced in the manifest of each input L1 product: if
+  they differ, or if an AUX file is not referenced in the manifest, a warning is issued, but processing continues;
 - when multiple L1A/S products belonging to different data-takes are provided together with the corresponding L0N
-  products, L1 and L0N products are paired automatically;
+  products, L1 and L0N products are paired automatically, matching mission, acquisition mode, absolute orbit number and
+  datatake ID in the product names (if several L0N products match, the first one is used and a warning is issued);
 - the output folder must be different from the input folders, to avoid polluting the input products.
 
 ## Example

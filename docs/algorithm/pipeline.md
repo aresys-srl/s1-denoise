@@ -36,9 +36,11 @@ flowchart TD
    The processor reads every file path given in the [Job Order](../user-guide/job-order.md) and checks that it is
    reachable from the current working directory. The expected inputs are the L1A/S product(s) (S1A/B/C/D), the
    AUX_INS, AUX_CAL and AUX_PP1 products and, optionally, the L0N product(s). Additional checks are performed:
-    - the AUX files provided by the user are compared with those used to generate each L1 product, to minimize the
-      reconstruction error; if they differ, a warning is issued, but processing continues;
-    - L1A/S and L0N products are paired automatically when products from different data-takes are provided together;
+    - the AUX files provided by the user are compared with those referenced in the manifest of each L1 product, to
+      minimize the reconstruction error; if they differ, or if an AUX file is not referenced, a warning is issued, but
+      processing continues;
+    - L1A/S and L0N products are paired automatically when products from different data-takes are provided together,
+      matching mission, acquisition mode, absolute orbit number and datatake ID;
     - the output folder must be different from the input folders.
 
 2. **Reading metadata from SAFE annotations**

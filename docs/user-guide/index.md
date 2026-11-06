@@ -70,6 +70,9 @@ denoise "/path/to/job/order.xml"
 The installed version can be checked with `denoise --version`, and all available options can be listed with
 `denoise --help`.
 
+The processor log is printed on the console and also written to `denoise.log` in the **current working directory**.
+Subsequent runs from the same directory append to the same file.
+
 ## Exit codes
 
 | Value | Mnemonic  | Description                                                                                                                       |

@@ -54,8 +54,13 @@ section of the product annotation:
     $$
 
 - $S(k)$ is the azimuth antenna pattern (AAP) read from AUX_CAL, in linear amplitude, interpolated in dB on the FFT
-  grid. The conversion from azimuth angles to Doppler frequencies relies on the Doppler centroid rate, derived from the
-  azimuth steering rate of the subswath read from AUX_INS (`radarParams/azimuthSteeringRate`).
+  grid. The angular step corresponding to one frequency bin is $\frac{\lambda}{2 v} \, \Delta f \, (1 - k_{\text{DC}} / k_{\text{FM}})$,
+  where $v$ is the satellite velocity and $1 - k_{\text{DC}} / k_{\text{FM}}$ is the TopSAR shrink factor. The Doppler
+  centroid rate $k_{\text{DC}}$ is derived from the azimuth steering rate of the subswath read from AUX_INS
+  (`radarParams/azimuthSteeringRate`), and the azimuth FM rate $k_{\text{FM}}$ from the `azimuthFmRateList` of the
+  product annotation, both evaluated at mid-range. For SLC products the FM rate record of the burst is used; for GRD
+  products, whose FM rate records are not aligned with the blocks of each subswath, the record closest in time to the
+  block is used.
 
 The expressions of $G_l$ and $W_l$ depend on whether the AAP correction has been applied by the IPF, as reported by the
 `antennaAzimuthPatternApplied` flag of the product annotation.

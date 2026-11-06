@@ -597,10 +597,17 @@ class ThermalNoise:
         azimuth_time : PreciseDateTime, optional
             Azimuth time of the current block, used for GRD products to select the closest FM rate record.
             Default is None (first record).
+
+        Raises
+        ------
+        ValueError
+            If `range_t` or `rel_burst` has not been set.
         """
 
-        range_filter = int(self.rel_burst is not None)
-        range_times = self.range_t[::range_filter]
+        if self.range_t is None or self.rel_burst is None:
+            raise ValueError("range_t and rel_burst must be set before computing the shrink factor")
+
+        range_times = self.range_t
 
         # deramping matrix
         FM_rate, az_mid_time = extract_FR_info(self.metadata_dict, range_times, self.rel_burst, self.is_grd, self.swath_id,

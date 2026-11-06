@@ -201,8 +201,13 @@ def hamming(nsize, alpha):
 
     Returns
     -------
-    numpy.ndarray or None
-        Window samples, or None if `alpha` is negative.
+    numpy.ndarray
+        Window samples.
+
+    Raises
+    ------
+    ValueError
+        If `alpha` is negative.
     """
 
     whamm = np.zeros(nsize, dtype=np.float64)
@@ -213,7 +218,7 @@ def hamming(nsize, alpha):
         return whamm
 
     if alpha < 0.0:
-        return None
+        raise ValueError(f"Invalid Hamming window coefficient {alpha}: it must be non-negative")
 
     # Constants
     TWO_PI = 2.0 * math.pi

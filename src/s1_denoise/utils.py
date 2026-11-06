@@ -102,6 +102,8 @@ def get_range_boundaries(swath_merges, subswath, az_time: str | PreciseDateTime)
     ------
     TypeError
         If `az_time` is neither a str nor a PreciseDateTime.
+    ValueError
+        If `subswath` is not in `swath_merges`.
     """
 
     if isinstance(az_time, str):
@@ -124,8 +126,11 @@ def get_range_boundaries(swath_merges, subswath, az_time: str | PreciseDateTime)
 
             first_range_sample = int(closest_swath_merge["firstRangeSample"])
             last_range_sample = int(closest_swath_merge["lastRangeSample"]) 
-    
-    return first_range_sample, last_range_sample
+
+            return first_range_sample, last_range_sample
+
+    available = [swath_merge["swath"] for swath_merge in swath_merges]
+    raise ValueError(f"Subswath {subswath} not found in the swath merge list (available: {', '.join(available)})")
 
 def ground2slant(start_az_time, gr_array, coordinate_conversions):
     """

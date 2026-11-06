@@ -212,6 +212,9 @@ def main():
 
     mode = product_name[4:6]
     dn = DN_VALUES.get((mode, prod_type))
+    if dn is None:
+        print(f"Unsupported mode/product type: {mode} {prod_type}")
+        sys.exit(128)
 
     print(f"Mode: {mode}\nProduct type: {prod_type}")
 

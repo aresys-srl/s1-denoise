@@ -260,12 +260,31 @@ class JobOrder:
         if manifest != jo_aux_file:
             denoise_logger.warning(f"Using {jo_aux_file} for {prod}, while input data was processed with {manifest}. Calculated error could not be precise.")
 
+def _safe_name_fields(safe_path: Path):
+    """
+    Return the fields identifying the acquisition from a Sentinel-1 SAFE product name.
+
+    Parameters
+    ----------
+    safe_path : pathlib.Path
+        Path of the SAFE product, named ``MMM_BB_TTTR_LFPP_<start>_<stop>_<orbit>_<datatake>_<crc>[.SAFE]``.
+
+    Returns
+    -------
+    tuple of str
+        Mission, acquisition mode, absolute orbit number and mission datatake ID.
+    """
+    name = safe_path.stem
+    parts = name.split('_')
+    return name[0:3].upper(), name[4:6].upper(), parts[-3], parts[-2].upper()
+
+
 def find_l0n(l1a: Path, l0n_list) -> Path | None:
     """
     Find the L0N product associated with an L1 product.
 
-    The absolute orbit number and the datatake ID are taken from the L1 product name (third-last and second-last
-    underscore-separated fields) and the first L0N product whose name contains both is returned.
+    The mission, acquisition mode, absolute orbit number and mission datatake ID are read from the product names
+    and must all match exactly. If several L0N products match, the first one is returned and a warning is issued.
 
     Parameters
     ----------
@@ -280,12 +299,12 @@ def find_l0n(l1a: Path, l0n_list) -> Path | None:
         The first matching L0N product, or ``None`` if no match is found.
     """
 
-    parts = l1a.stem.split('_')
-    orbit_number, datatake_id = parts[-3], parts[-2]
+    l1a_fields = _safe_name_fields(l1a)
 
-    # look for element in list with same orbit_number and datatake_id
-    for item in l0n_list:
-        l0n_name = item.stem
-        if orbit_number in l0n_name and datatake_id in l0n_name:
-            return item # give back first match
-    return None
+    # look for L0N products of the same mission, mode, orbit and datatake
+    matches = [item for item in l0n_list if _safe_name_fields(item) == l1a_fields]
+
+    if len(matches) > 1:
+        denoise_logger.warning(f"Multiple L0N products match {l1a.stem}: using {matches[0].stem}")
+
+    return matches[0] if matches else None # give back first match

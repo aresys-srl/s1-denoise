@@ -251,12 +251,20 @@ def calculate_error(nominal_noise_filepath, denoise_filepath):
         Mean absolute difference [dB].
     max_error : float
         Maximum absolute difference [dB].
+
+    Raises
+    ------
+    ValueError
+        If the mode and product type of the product are not in `DN_VALUES`.
     """
 
     product_name = nominal_noise_filepath.parent.parent.parent.stem
     mode = product_name[4:6]
     prod_type = product_name[7:10]
     dn = DN_VALUES.get((mode, prod_type))
+    if dn is None:
+        raise ValueError(f"Unsupported mode/product type for error calculation: {mode} {prod_type} "
+                         f"(supported: {', '.join(' '.join(k) for k in DN_VALUES)})")
 
     common_pixels, common_times_sec, diff_db, f1, f2, mean_error, max_error = compare_noise(nominal_noise_filepath, denoise_filepath, dn)
 

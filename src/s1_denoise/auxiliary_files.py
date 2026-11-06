@@ -395,6 +395,11 @@ class AuxiliaryFiles:
         -------
         float
             Digital number value, used to scale the output noise vectors.
+
+        Raises
+        ------
+        ValueError
+            If AUX_PP1 has no ``<mode>_Default`` scaling LUT for the output pixel type of the product.
         """
 
         if product_type == "SLC":
@@ -405,10 +410,13 @@ class AuxiliaryFiles:
             output_pixels = "8 bit Unsigned Integer"
 
         dn_value = next(
-                        (d["values"][0] for d in self.app_lut_values[f"{mode}_Default"] if d["outputPixels"] == output_pixels),
+                        (d["values"][0] for d in self.app_lut_values.get(f"{mode}_Default", []) if d["outputPixels"] == output_pixels),
                         None
                     )
 
+        if dn_value is None:
+            raise ValueError(f"No {mode}_Default scaling LUT with output pixels '{output_pixels}' found in AUX_PP1 "
+                             f"for product type {product_type}")
 
         return float(dn_value)
     

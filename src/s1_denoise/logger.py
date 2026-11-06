@@ -19,7 +19,9 @@ def setup_logger():
     """
     Set up the ``denoise`` logger with colorized console output and file output.
 
-    Handlers are attached only if the logger has none yet, so repeated calls do not duplicate output. Log levels
+    Handlers are attached only if the ``denoise`` logger itself has none yet (handlers of ancestor loggers are not
+    considered), so repeated calls do not duplicate output. Propagation to ancestor loggers is disabled, so that
+    records are not printed twice when the root logger is configured by the host application. Log levels
     are renamed to short tags (``[D]``, ``[I]``, ``[W]``, ``[E]``, ``[P]``), records are written both to the console
     (colorized) and to ``denoise.log`` in the current working directory, and the level is set to ``INFO``.
 
@@ -32,8 +34,9 @@ def setup_logger():
     # Check if the logger has already handlers attached
     logger = logging.getLogger("denoise")
 
-    # Only set up logging if no handlers are already attached
-    if not logger.hasHandlers():
+    # Only set up logging if no handlers are already attached to this logger
+    # (hasHandlers() would also look at ancestor loggers, e.g. a root logger configured by the host application)
+    if not logger.handlers:
 
         logging.addLevelName(logging.NOTSET, "")
         logging.addLevelName(logging.DEBUG, "[D]")
@@ -75,6 +78,7 @@ def setup_logger():
         logger.addHandler(file_handler)
 
         logger.setLevel(logging.INFO)
+        logger.propagate = False
 
     return logger
 

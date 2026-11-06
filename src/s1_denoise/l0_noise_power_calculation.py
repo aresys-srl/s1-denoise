@@ -247,7 +247,9 @@ def filter_rank_echoes(noise: dict, mission_id: str):
     For S1A/B, the spikes in the first burst of the data-take are removed for IW1 and EW1 (second value), the last EW1
     value is removed (possible nadir returns), and values biased by calibration pulses are discarded in an alternating
     pattern for IW1, IW2 and IW3. For all missions, EW2 values (except the first) are replaced in place with the EW3 ones
-    of the same polarization.
+    of the same polarization. If EW3 is missing, the EW2 values are kept; if the two sequences have different lengths,
+    only the overlapping values are replaced, so that EW2 times and values stay aligned. A warning is issued in both
+    cases.
     """
 
     filtered = {}
@@ -292,7 +294,20 @@ def filter_rank_echoes(noise: dict, mission_id: str):
     # for EW2, substitute noise values with ones from EW3
     keys_to_replace = [k for k in filtered if k[0] == "EW2"]
     for subswath, pol in keys_to_replace:
-        filtered[("EW2", pol)][1][1:] = filtered[("EW3", pol)][1][1:]
+        if ("EW3", pol) not in filtered:
+            denoise_logger.warning(f"EW3 noise not available for polarization {pol}: EW2 rank echoes are not replaced")
+            continue
+
+        ew2_noise = filtered[("EW2", pol)][1]
+        ew3_noise = filtered[("EW3", pol)][1]
+        n_values = min(len(ew2_noise), len(ew3_noise))
+        if len(ew2_noise) != len(ew3_noise):
+            denoise_logger.warning(f"EW2 and EW3 noise sequences have different lengths ({len(ew2_noise)} vs "
+                                   f"{len(ew3_noise)}) for polarization {pol}: only the first {n_values} EW2 values "
+                                   "are replaced")
+
+        # replace without changing the length of the EW2 sequence, to keep times and values aligned
+        ew2_noise[1:n_values] = ew3_noise[1:n_values]
 
     return filtered
 

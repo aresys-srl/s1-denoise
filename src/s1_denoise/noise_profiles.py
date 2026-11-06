@@ -119,12 +119,12 @@ def slc_processing(safe, aux_files, dn_value, noise_power_correction):
             thermal_noise.rel_burst = rel_burst
             thermal_noise.get_shrink_factor()
             
-            sim_noise, incidence_angles = thermal_noise.compute_simulated_noise(az_central_time)
+            sim_noise, sin_incidence = thermal_noise.compute_simulated_noise(az_central_time)
 
             start_az_time = az_t0.isoformat(sep="T", timespec="microseconds").rstrip("Z")
 
             sim_noises.update({
-                (rel_burst, start_az_time): (sim_noise, geo_grid_info, incidence_angles, dn_value)
+                (rel_burst, start_az_time): (sim_noise, geo_grid_info, sin_incidence, dn_value)
             })
         
         # Append it
@@ -170,7 +170,6 @@ def grd_processing(safe, aux_files, dn_value, noise_power_correction):
 
         count_noise_list = int(channel.annotation.find('generalAnnotation/noiseList').attrib['count'])
         antenna_patterns = channel.annotation.findall('antennaPattern/antennaPatternList/antennaPattern')
-        tot_noise_vectors_out = int(channel.annotation.find('antennaPattern/antennaPatternList').attrib['count'])
         swath_merging_info = ensure_list(metadata_dict['product']['swathMerging']['swathMergeList']['swathMerge'])
 
         # for slant to range conversion
@@ -222,25 +221,24 @@ def grd_processing(safe, aux_files, dn_value, noise_power_correction):
                 thermal_noise.get_shrink_factor(az_t0)
                 
                 # slant range simulated noise
-                sim_noise, incidence_angles = thermal_noise.compute_simulated_noise(az_t0)
+                sim_noise, sin_incidence = thermal_noise.compute_simulated_noise(az_t0)
 
                 # convert from slant range to ground range using actual SR distances
                 az_t0_string = az_t0.isoformat(sep="T", timespec="microseconds").rstrip("Z")
-                sim_noise, incidence_angles = slant2ground(
-                    az_t0_string, sim_noise, incidence_angles,
+                sim_noise, sin_incidence = slant2ground(
+                    az_t0_string, sim_noise, sin_incidence,
                     coordinate_conversions, thermal_noise.range_distances
                 )
 
                 sim_noises.update({
-                    (index, subswath): (az_t0_string, sim_noise, incidence_angles)
+                    (index, subswath): (az_t0_string, sim_noise, sin_incidence)
                 })
 
         # append it
         simulated_noises.append(OutputNoiseVectors_GRD(adsHeader=ads_header, 
                                                        swath_merges=swath_merging_info, 
                                                        noiseRangeVectors=sim_noises,
-                                                       dn_value=dn_value,
-                                                       tot_vec_out=tot_noise_vectors_out))
+                                                       dn_value=dn_value))
 
     return simulated_noises
 
@@ -276,7 +274,7 @@ def generate_noise_profiles(prod: Path, aux_files: AuxiliaryFiles, l0n_file: Pat
     denoise_logger.info(f"Denoising product: {prod.resolve()}")
 
     if l0n_file is not None:        
-        noise_power_correction = get_noise_pwr_from_l0n(l0n_path = l0n_file, aux_ins_path = aux_files.ins_filepath)
+        noise_power_correction = get_noise_pwr_from_l0n(l0n_path = l0n_file)
     else:
         noise_power_correction = None
 

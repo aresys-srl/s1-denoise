@@ -75,7 +75,7 @@ class NoiseRangeVector_SLC:
         Output pixel indices.
     noise_values : numpy.ndarray
         Simulated noise for each range sample (linear power).
-    incidence_angles : numpy.ndarray
+    sin_incidence : numpy.ndarray
         Sine of the incidence angle for each range sample.
     lut_value : float
         Digital number calibration value from AUX_PP1.
@@ -96,14 +96,14 @@ class NoiseRangeVector_SLC:
         Number of output noise values.
     """
 
-    def __init__(self, azimuth_start_time, line, pixels, noise_values, incidence_angles, lut_value):
+    def __init__(self, azimuth_start_time, line, pixels, noise_values, sin_incidence, lut_value):
 
         self.azimuthTime = azimuth_start_time
         self.line = line
         self.pixels = pixels
         self.pixel_count = len(self.pixels)
 
-        noise = noise_values / incidence_angles
+        noise = noise_values / sin_incidence
 
         noise *= lut_value ** 2
         noise = np.interp(self.pixels, np.arange(len(noise)), noise)
@@ -124,7 +124,7 @@ class NoiseRangeVector_GRD:
         Azimuth time of the vector, in ISO format.
     noise_values : array_like
         Simulated noise for each sample (linear power), concatenated over the subswaths.
-    incidence_angles : array_like
+    sin_incidence : array_like
         Sine of the incidence angle for each sample.
     line_no : int
         Line number of the vector.
@@ -151,14 +151,14 @@ class NoiseRangeVector_GRD:
         Number of output noise values.
     """
 
-    def __init__(self, start_az_time, noise_values, incidence_angles, line_no, pixels_array, sample_pixel_coords, lut_value):
+    def __init__(self, start_az_time, noise_values, sin_incidence, line_no, pixels_array, sample_pixel_coords, lut_value):
 
         self.azimuthTime = start_az_time
         self.line = line_no
         self.pixels = pixels_array
         self.pixel_count = len(self.pixels)
 
-        noise = np.array(noise_values) / np.array(incidence_angles)
+        noise = np.array(noise_values) / np.array(sin_incidence)
         noise *= lut_value ** 2
         noise = np.interp(np.array(self.pixels, dtype=float), sample_pixel_coords, noise)
 
@@ -202,7 +202,7 @@ class OutputNoiseVectors_SLC:
             start_az_time = burst_values[1]
             sim_noise = noise_values[0]
             geo_grid_info = noise_values[1]
-            incidence_angles = noise_values[2]
+            sin_incidence = noise_values[2]
             dn_value = noise_values[3]
 
             # the geolocation grid is the same for all the bursts of the swath
@@ -213,7 +213,7 @@ class OutputNoiseVectors_SLC:
                                                    geo_grid_lines[rel_burst],
                                                    pixels,
                                                    sim_noise,
-                                                   incidence_angles,
+                                                   sin_incidence,
                                                    dn_value)
             
             self.noise_range_vectors.append(noise_range_vec)
@@ -239,8 +239,6 @@ class OutputNoiseVectors_GRD:
         ``(azimuth_time, noise, sin_incidence)``, with the noise in ground range.
     dn_value : float
         Digital number calibration value from AUX_PP1.
-    tot_vec_out : int
-        Number of annotated antenna pattern records. Not used.
 
     Attributes
     ----------
@@ -252,7 +250,7 @@ class OutputNoiseVectors_GRD:
         Number of noise range vectors.
     """
 
-    def __init__(self, adsHeader: dict, swath_merges, noiseRangeVectors, dn_value, tot_vec_out):
+    def __init__(self, adsHeader: dict, swath_merges, noiseRangeVectors, dn_value):
 
         self.ads_header = adsHeader
         self.noise_range_vectors = []
@@ -290,7 +288,7 @@ class OutputNoiseVectors_GRD:
             line_no  = subswath_extended[subswaths[0]][i][3]
 
             noise = []
-            incidence_angles = []
+            sin_incidence = []
             sample_pixel_coords = []
             pixels = []
             last_prec = None
@@ -298,7 +296,7 @@ class OutputNoiseVectors_GRD:
 
             for subswath in subswaths:
                 noise_sw   = subswath_extended[subswath][i][1]
-                angles_sw  = subswath_extended[subswath][i][2]
+                sin_incidence_sw  = subswath_extended[subswath][i][2]
 
                 # Retrieve the pixel range covered by this subswath at the current azimuth time
                 first, last = get_range_boundaries(swath_merges=swath_merges, subswath=subswath, az_time=az_time)
@@ -310,7 +308,7 @@ class OutputNoiseVectors_GRD:
                         prev_pixel_width = last_prec - first_prec + 1
                         overlap_samples = round(overlap_pixels * len(noise) / prev_pixel_width)
                         noise = noise[:-overlap_samples]
-                        incidence_angles = incidence_angles[:-overlap_samples]
+                        sin_incidence = sin_incidence[:-overlap_samples]
                         sample_pixel_coords = sample_pixel_coords[:-overlap_samples]
 
                 # Append this subswath's samples, mapping them uniformly across its pixel range
@@ -318,14 +316,14 @@ class OutputNoiseVectors_GRD:
                 n_samples = len(noise_sw)
                 sample_pixel_coords.extend(np.linspace(first, last, n_samples).tolist())
                 noise.extend(list(noise_sw))
-                incidence_angles.extend(list(angles_sw))
+                sin_incidence.extend(list(sin_incidence_sw))
 
                 first_prec = first
                 last_prec = last
 
             # Build the merged noise range vector for this azimuth line and store it
             pixel_line = calculate_pixel_line(pixels)
-            noise_range_vec = NoiseRangeVector_GRD(az_time, noise, incidence_angles, line_no, pixel_line, sample_pixel_coords, dn_value)
+            noise_range_vec = NoiseRangeVector_GRD(az_time, noise, sin_incidence, line_no, pixel_line, sample_pixel_coords, dn_value)
             self.noise_range_vectors.append(noise_range_vec)
 
         self.vector_count = len(self.noise_range_vectors)
@@ -405,20 +403,20 @@ def extend_noise_grd(input_vectors, start_time, stop_time, max_lines):
 
     target_len = max(len(input_vectors[j][1]) for j in range(len(input_vectors)))
 
-    # resample noise and incidence angles of each vector to the same length,
+    # resample noise and sine of the incidence angles of each vector to the same length,
     # without modifying the input vectors
     x_new = np.linspace(0, 1, target_len)
     resampled_vectors = []
     for j in range(len(input_vectors)):
         vec = list(input_vectors[j])  # make a mutable copy
-        for idx in (1, 2):  # noise, incidence_angles
+        for idx in (1, 2):  # noise, sine of the incidence angles
             y = np.array(vec[idx])
             x = np.linspace(0, 1, len(y))
             vec[idx] = np.interp(x_new, x, y).tolist()
         resampled_vectors.append(vec)
 
     noise_old = np.stack([v[1] for v in resampled_vectors])
-    angles_old = np.stack([v[2] for v in resampled_vectors])
+    sin_incidence_old = np.stack([v[2] for v in resampled_vectors])
 
     interp_noise = interp1d(
         az_times_old,
@@ -428,16 +426,16 @@ def extend_noise_grd(input_vectors, start_time, stop_time, max_lines):
         fill_value=(noise_old[0], noise_old[-1])
     )
 
-    interp_angles = interp1d(
+    interp_sin_incidence = interp1d(
         az_times_old,
-        angles_old,
+        sin_incidence_old,
         axis=0,
         bounds_error=False,
-        fill_value=(angles_old[0], angles_old[-1])
+        fill_value=(sin_incidence_old[0], sin_incidence_old[-1])
     )
     
     noise_new = interp_noise(az_times_new)
-    incidence_angles_new = interp_angles(az_times_new)
+    sin_incidence_new = interp_sin_incidence(az_times_new)
 
     delta_line = (az_times_new[-1] - az_times_new[0])/max_lines
 
@@ -447,7 +445,7 @@ def extend_noise_grd(input_vectors, start_time, stop_time, max_lines):
         line_number = int(np.round((az_times_new[i]-az_times_new[0])/delta_line))
 
         output_vectors.update({
-            i: (PreciseDateTime.from_sec85(az_times_new[i]).isoformat(timespec="microseconds").rstrip("Z"), noise_new[i, :], incidence_angles_new[i, :], line_number)
+            i: (PreciseDateTime.from_sec85(az_times_new[i]).isoformat(timespec="microseconds").rstrip("Z"), noise_new[i, :], sin_incidence_new[i, :], line_number)
         })
 
     return output_vectors

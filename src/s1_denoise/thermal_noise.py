@@ -553,7 +553,7 @@ class ThermalNoise:
 
         return G_tot
 
-    def compute_simulated_noise(self, azimuth_T) -> NDArray[np.float64]:
+    def compute_simulated_noise(self, azimuth_T) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
         """
         Compute the simulated noise range vector at a given azimuth time, in slant range.
 

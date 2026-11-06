@@ -11,7 +11,6 @@ scaling factor of the product.
 
 import numpy as np
 import xml.etree.ElementTree as ET
-import numpy as np
 from scipy.interpolate import interp1d, RegularGridInterpolator
 
 from perseo_core.timing import PreciseDateTime

@@ -551,12 +551,10 @@ def is_wave(safe_name):
 
     Returns
     -------
-    bool or None
-        ``True`` if the mode is ``WV``, ``None`` otherwise.
+    bool
+        ``True`` if the mode is ``WV``, ``False`` otherwise.
     """
-    mode = mode_from_safe_name(safe_name)
-    if mode == 'WV':
-        return True
+    return mode_from_safe_name(safe_name) == 'WV'
 
 
 def is_grd(safe_name):
@@ -900,8 +898,6 @@ class S1Safe:
     ----------
     safe_path : str or pathlib.Path
         Path to the SAFE product directory.
-    img_num : str, optional
-        Unused. Default is ``None``.
 
     Attributes
     ----------
@@ -915,8 +911,6 @@ class S1Safe:
         Acquisition mode (e.g. ``IW``, ``EW``).
     product_type : str
         Product type (e.g. ``SLC``, ``GRDH``).
-    ads_header : list
-        Placeholder for the ADS header, currently always empty.
 
     Raises
     ------
@@ -925,7 +919,7 @@ class S1Safe:
     StopIteration
         If an annotation, noise, calibration or RFI file of a channel is missing.
     """
-    def __init__(self, safe_path, img_num=None):
+    def __init__(self, safe_path):
         self.path = Path(safe_path)
         if not self.path.exists():
             raise ValueError('Path does not exist: {}'.format(safe_path))
@@ -934,7 +928,6 @@ class S1Safe:
         self.mode = mode_from_safe_name(self.name)
         self.product_type = product_type_from_safe_name(self.name)
         self._channels = self._build_channels_dict()
-        self.ads_header = self.get_ads_header()
 
     def _build_channels_dict(self):
         """
@@ -990,18 +983,6 @@ class S1Safe:
         
         return channels
 
-    def get_ads_header(self):
-        """
-        Return the ADS header of the product.
-
-        Returns
-        -------
-        list
-            Always an empty list (placeholder).
-        """
-        ads_header = []
-        return ads_header
-
     def is_grd(self):
         """
         Check whether the product is a GRD product.
@@ -1041,8 +1022,8 @@ class S1Safe:
 
         Returns
         -------
-        bool or None
-            ``True`` if the mode is ``WV``, ``None`` otherwise.
+        bool
+            ``True`` if the mode is ``WV``, ``False`` otherwise.
         """
         return is_wave(self.name)
 

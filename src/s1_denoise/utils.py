@@ -170,7 +170,7 @@ def ground2slant(start_az_time, gr_array, coordinate_conversions):
 
     return sr_array
 
-def slant2ground(start_az_time, sim_noise_sr, inc_angle_sr, coordinate_conversions, sr_distances):
+def slant2ground(start_az_time, sim_noise_sr, sin_incidence_sr, coordinate_conversions, sr_distances):
     """
     Resample slant range data onto a uniform ground range grid.
 
@@ -184,22 +184,22 @@ def slant2ground(start_az_time, sim_noise_sr, inc_angle_sr, coordinate_conversio
         ISO azimuth time used to select the coordinate conversion record.
     sim_noise_sr : array_like
         Simulated noise on the slant range grid.
-    inc_angle_sr : array_like
-        Incidence-angle-related values on the slant range grid (the GRD pipeline passes their sine).
+    sin_incidence_sr : array_like
+        Sine of the incidence angle on the slant range grid.
     coordinate_conversions : list of dict
         Coordinate conversion records with ``azimuthTime``, ``sr0`` and ``srgrCoeffs`` (list of float).
     sr_distances : array_like
-        Slant range distances [m] of the samples of `sim_noise_sr` and `inc_angle_sr`.
+        Slant range distances [m] of the samples of `sim_noise_sr` and `sin_incidence_sr`.
 
     Returns
     -------
     sim_noise_gr : numpy.ndarray
         Simulated noise on the uniform ground range grid.
-    inc_angle_gr : numpy.ndarray
-        `inc_angle_sr` resampled on the uniform ground range grid.
+    sin_incidence_gr : numpy.ndarray
+        `sin_incidence_sr` resampled on the uniform ground range grid.
     """
     sim_noise_sr = np.asarray(sim_noise_sr, dtype=float)
-    inc_angle_sr = np.asarray(inc_angle_sr, dtype=float)
+    sin_incidence_sr = np.asarray(sin_incidence_sr, dtype=float)
     sr_distances = np.asarray(sr_distances, dtype=float)
 
     # select closest SRGR polynomial in azimuth
@@ -220,9 +220,9 @@ def slant2ground(start_az_time, sim_noise_sr, inc_angle_sr, coordinate_conversio
     gr_grid = np.linspace(gr.min(), gr.max(), sim_noise_sr.size)
 
     sim_noise_gr = np.interp(gr_grid, gr, sim_noise_sr, left=np.nan, right=np.nan)
-    inc_angle_gr = np.interp(gr_grid, gr, inc_angle_sr, left=np.nan, right=np.nan)
+    sin_incidence_gr = np.interp(gr_grid, gr, sin_incidence_sr, left=np.nan, right=np.nan)
 
-    return sim_noise_gr, inc_angle_gr
+    return sim_noise_gr, sin_incidence_gr
 
 def remove_outliers(azimuth_times, noise_pulses, expected_noise_value):
     """

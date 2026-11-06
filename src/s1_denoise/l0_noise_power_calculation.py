@@ -29,38 +29,6 @@ _GPS_EPOCH_TO_PRECISEDATETIME_EPOCH_SEC = 157420800.0
 _GPS_UTC_LEAP_SECONDS = 18
 
 
-def iq_bias_correction(raw_data):
-    """
-    Apply the I/Q bias correction to complex raw data.
-
-    Parameters
-    ----------
-    raw_data : numpy.ndarray
-        Complex raw samples.
-
-    Returns
-    -------
-    numpy.ndarray
-        Complex samples with zero-mean I and Q components.
-
-    Notes
-    -----
-    For Sentinel-1 data the demodulation is performed by the instrument's receive module in the digital domain, so the
-    I/Q gain imbalance and non-orthogonality corrections are not necessary: only the constant biases are removed.
-    """
-
-    i_values = raw_data.real
-    q_values = raw_data.imag
-
-    # remove constant biases: enforce zero mean
-    i_out = i_values - np.mean(i_values)
-    q_out = q_values - np.mean(q_values)
-
-    corrected_data = i_out + 1j * q_out
-
-    return corrected_data
-
-
 def _packet_time(coarse_time, fine_time) -> PreciseDateTime:
     """
     Convert the packet "Coarse Time"/"Fine Time" fields (GPS time) into a UTC PreciseDateTime.
@@ -217,6 +185,12 @@ def _global_bias_correct_power(lines):
     -------
     list of float
         Mean power of each bias-corrected line.
+
+    Notes
+    -----
+    For Sentinel-1 data the demodulation is performed by the instrument's receive module in the digital domain, so the
+    I/Q gain imbalance and non-orthogonality corrections are not necessary: only the constant I and Q biases, estimated
+    over all lines of the channel, are removed (zero-mean I and Q components).
     """
 
     all_real = np.concatenate([line.real for line in lines])
@@ -380,7 +354,7 @@ def calculate_noise_power(l0n_path: Path, mission_id: str, rank_echoes_present: 
     return filtered
 
 
-def get_noise_pwr_from_l0n(l0n_path: Path, aux_ins_path: Path = None):
+def get_noise_pwr_from_l0n(l0n_path: Path):
     """
     Extract the noise power sequences of each channel from a Sentinel-1 L0N SAFE product.
 
@@ -390,8 +364,6 @@ def get_noise_pwr_from_l0n(l0n_path: Path, aux_ins_path: Path = None):
     ----------
     l0n_path : pathlib.Path
         Path of the L0N SAFE directory.
-    aux_ins_path : pathlib.Path, optional
-        Path of the AUX_INS file. Currently unused. Default is None.
 
     Returns
     -------

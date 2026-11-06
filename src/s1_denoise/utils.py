@@ -156,7 +156,7 @@ def ground2slant(start_az_time, gr_array, coordinate_conversions):
         key=lambda cc: abs(iso_to_datetime(cc["azimuthTime"]) - iso_to_datetime(start_az_time))
     )
 
-    sr0 = float(cc["sr0"])
+    # GRSR polynomial: sr = P(gr - gr0) (sr0 is the origin of the SRGR polynomial only)
     gr0 = float(cc["gr0"])
     grsr_coeffs = [float(c) for c in cc["grsrCoefficients"]['#text'].split(' ')]
 
@@ -170,7 +170,7 @@ def slant2ground(start_az_time, sim_noise_sr, inc_angle_sr, coordinate_conversio
     Resample slant range data onto a uniform ground range grid.
 
     The slant range distances are converted to ground range with the SRGR polynomial of the coordinate conversion record
-    closest in azimuth to `start_az_time`, as ``gr0 + P(sr - sr0)``. Both inputs are then linearly interpolated onto a
+    closest in azimuth to `start_az_time`, as ``P(sr - sr0)``. Both inputs are then linearly interpolated onto a
     uniform ground range grid spanning the converted distances, with the same number of samples (NaN outside).
 
     Parameters
@@ -182,7 +182,7 @@ def slant2ground(start_az_time, sim_noise_sr, inc_angle_sr, coordinate_conversio
     inc_angle_sr : array_like
         Incidence-angle-related values on the slant range grid (the GRD pipeline passes their sine).
     coordinate_conversions : list of dict
-        Coordinate conversion records with ``azimuthTime``, ``sr0``, ``gr0`` and ``srgrCoeffs`` (list of float).
+        Coordinate conversion records with ``azimuthTime``, ``sr0`` and ``srgrCoeffs`` (list of float).
     sr_distances : array_like
         Slant range distances [m] of the samples of `sim_noise_sr` and `inc_angle_sr`.
 
@@ -204,12 +204,12 @@ def slant2ground(start_az_time, sim_noise_sr, inc_angle_sr, coordinate_conversio
     )
 
     sr0 = float(cc["sr0"])
-    gr0 = float(cc["gr0"])
     sr_to_gr_polynomial = cc["srgrCoeffs"]
 
-    # from SR distances to GR distances (metres)
+    # from SR distances to GR distances (metres): SRGR polynomial gr = P(sr - sr0)
+    # (gr0 is the origin of the GRSR polynomial only)
     sr_norm = sr_distances - sr0
-    gr = gr0 + np.polyval(sr_to_gr_polynomial[::-1], sr_norm)
+    gr = np.polyval(sr_to_gr_polynomial[::-1], sr_norm)
 
     # resample onto a uniform GR grid of same length
     gr_grid = np.linspace(gr.min(), gr.max(), sim_noise_sr.size)

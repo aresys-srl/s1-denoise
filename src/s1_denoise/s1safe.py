@@ -806,14 +806,10 @@ def datetime_to_string(dt):
     Returns
     -------
     str
-        String ``YYYYMMDDTHHMMSS`` built from the datetime fields.
-
-    Notes
-    -----
-    Fields are not zero-padded, so the result matches the SAFE format only when month, day, hour, minute and
-    second have two digits.
+        Datetime string in the format ``YYYYMMDDTHHMMSS`` (e.g. ``'20210105T090701'``), inverse of
+        `string_to_datetime`. Sub-second precision is discarded.
     """
-    safe_datetime_str = '{}{}{}T{}{}{}'.format(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)
+    safe_datetime_str = dt.strftime('%Y%m%dT%H%M%S')
     return safe_datetime_str
 
 
@@ -1155,6 +1151,11 @@ class S1Channel:
         Parsed RFI annotation.
     measurement : pathlib.Path or None
         Measurement TIFF file, or ``None`` if not available.
+
+    Raises
+    ------
+    ValueError
+        If `meas_file` is given but does not exist.
     """
     def __init__(self, pol, swath_id, annnot_file, noise_file, calibration_file, rfi_file, meas_file=None):
         self.swath_id = swath_id
@@ -1166,7 +1167,7 @@ class S1Channel:
         if meas_file is not None:
             meas_file = Path(meas_file)
             if not meas_file.exists():
-                ValueError('File does not exist: {}'.format(meas_file))
+                raise ValueError('File does not exist: {}'.format(meas_file))
             self.measurement = meas_file
         else:
             self.measurement = None

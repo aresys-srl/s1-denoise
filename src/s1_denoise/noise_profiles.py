@@ -180,7 +180,6 @@ def grd_processing(safe, aux_files, dn_value, noise_power_correction):
             coordinate_conversions.append({
                 "azimuthTime": cc["azimuthTime"],
                 "sr0": float(cc["sr0"]),
-                "gr0": float(cc["gr0"]),  # adjust if needed
                 "srgrCoeffs": [float(x) for x in cc["srgrCoefficients"]["#text"].split()]
             })
         
@@ -220,7 +219,7 @@ def grd_processing(safe, aux_files, dn_value, noise_power_correction):
                 # create simulated noise
                 thermal_noise.set_range_values(range_t)
                 thermal_noise.rel_burst = index
-                thermal_noise.get_shrink_factor()
+                thermal_noise.get_shrink_factor(az_t0)
                 
                 # slant range simulated noise
                 sim_noise, incidence_angles = thermal_noise.compute_simulated_noise(az_t0)

@@ -584,20 +584,27 @@ class ThermalNoise:
 
         return np.array(simulated_noise, dtype=np.float64), np.sin(inc_angles)
 
-    def get_shrink_factor(self):
+    def get_shrink_factor(self, azimuth_time=None):
         """
         Compute the TopSAR azimuth shrink factor of the current burst and store it in `shrink_factor`.
 
         The shrink factor is $1 - k_{DC} / k_{FM}$, where $k_{FM}$ is the azimuth FM rate of the burst
         (`rel_burst`) and $k_{DC}$ the Doppler centroid rate derived from the AUX_INS azimuth steering rate,
         both evaluated at mid-range as in the IPF. It requires `range_t` and `rel_burst` to be set.
+
+        Parameters
+        ----------
+        azimuth_time : PreciseDateTime, optional
+            Azimuth time of the current block, used for GRD products to select the closest FM rate record.
+            Default is None (first record).
         """
 
         range_filter = int(self.rel_burst is not None)
         range_times = self.range_t[::range_filter]
 
         # deramping matrix
-        FM_rate, az_mid_time = extract_FR_info(self.metadata_dict, range_times, self.rel_burst, self.is_grd, self.swath_id)
+        FM_rate, az_mid_time = extract_FR_info(self.metadata_dict, range_times, self.rel_burst, self.is_grd, self.swath_id,
+                                               azimuth_time=azimuth_time)
         FM_rate_mid = FM_rate[range_times.size // 2]
 
         AR_vec = extract_AR_info(self.metadata_dict, az_mid_time, range_times, self.azimuth_steering_rate, orbit=self.orbit)

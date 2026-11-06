@@ -286,7 +286,8 @@ def extract_AR_info(metadata_dict, az_t, range_times, az_steering_rate, orbit = 
 
     return AR_vec
 
-def extract_FR_info(metadata_dict, range_times, burst_idx = None, is_grd: bool = False, subswath = None):
+def extract_FR_info(metadata_dict, range_times, burst_idx = None, is_grd: bool = False, subswath = None,
+                    azimuth_time = None):
     """
     Evaluate the azimuth FM rate over the range axis.
 
@@ -302,6 +303,8 @@ def extract_FR_info(metadata_dict, range_times, burst_idx = None, is_grd: bool =
         Whether the product is GRD. Default is False.
     subswath : str, optional
         Subswath identifier, required when `is_grd` is True. Default is None.
+    azimuth_time : PreciseDateTime, optional
+        Azimuth time of the GRD block being processed (GRD only). Default is None (first record).
 
     Returns
     -------
@@ -312,8 +315,8 @@ def extract_FR_info(metadata_dict, range_times, burst_idx = None, is_grd: bool =
 
     Notes
     -----
-    The first record returned by `extract_FMrate` is used. For GRD products `burst_idx` is ignored, so the first
-    annotated record is always used.
+    For SLC products the record selected by `burst_idx` is used. For GRD products, whose FM rate records are not
+    aligned by index with the blocks of each subswath, the record closest in time to `azimuth_time` is used.
     """
     
     # Extract FMrate info
@@ -322,8 +325,14 @@ def extract_FR_info(metadata_dict, range_times, burst_idx = None, is_grd: bool =
                                                  is_grd = is_grd,
                                                  subswath = subswath)
 
-    FR = FM_poly_coeffs[0].evaluate(range_times)  # burst_idx is handled inside extract_FMrate
-    az_mid_time = burst_times[0]
+    # burst_idx is handled inside extract_FMrate for SLC products; for GRD products select the record
+    # closest in time to the current block
+    record_idx = 0
+    if is_grd and azimuth_time is not None:
+        record_idx = min(range(len(burst_times)), key=lambda i: abs(burst_times[i] - azimuth_time))
+
+    FR = FM_poly_coeffs[record_idx].evaluate(range_times)
+    az_mid_time = burst_times[record_idx]
     
     return FR, az_mid_time
 

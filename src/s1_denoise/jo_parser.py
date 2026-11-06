@@ -199,17 +199,8 @@ class JobOrder:
         Check the L1 input products and the coherence of their auxiliary files with the Job Order.
 
         For each product to process, verify that the product directory and its ``manifest.safe`` exist, then compare
-        the AUX_INS, AUX_PP1 and AUX_CAL names referenced in the manifest with those given in the Job Order. A mismatch
-        only produces a warning.
-
-        Returns
-        -------
-        manifest_ins : str
-            AUX_INS file name referenced in the manifest of the last checked product.
-        manifest_pp1 : str
-            AUX_PP1 file name referenced in the manifest of the last checked product.
-        manifest_cal : str
-            AUX_CAL file name referenced in the manifest of the last checked product.
+        the AUX_INS, AUX_PP1 and AUX_CAL names referenced in the manifest with those given in the Job Order. A mismatch,
+        or an auxiliary file not referenced in the manifest, only produces a warning.
 
         Raises
         ------
@@ -235,18 +226,23 @@ class JobOrder:
                 "safe": "http://www.esa.int/safe/sentinel-1.0"
             }
 
-            for res in root.findall(".//safe:resource", ns):
-                if res.get("role") == "AUX_INS":
-                    manifest_ins = Path(res.get("name")).name
-                    self.check_coherence(manifest_ins, self.aux_ins_filepath.name, prod_name.stem)
-                elif res.get("role") == "AUX_PP1":
-                    manifest_pp1 = Path(res.get("name")).name
-                    self.check_coherence(manifest_pp1, self.aux_pp1_filepath.name, prod_name.stem)
-                elif res.get("role") == "AUX_CAL":
-                    manifest_cal = Path(res.get("name")).name
-                    self.check_coherence(manifest_cal, self.aux_cal_filepath.name, prod_name.stem)
+            jo_aux_files = {
+                "AUX_INS": self.aux_ins_filepath.name,
+                "AUX_PP1": self.aux_pp1_filepath.name,
+                "AUX_CAL": self.aux_cal_filepath.name,
+            }
+            checked_roles = set()
 
-        return manifest_ins, manifest_pp1, manifest_cal
+            for res in root.findall(".//safe:resource", ns):
+                role = res.get("role")
+                if role in jo_aux_files:
+                    manifest_aux = Path(res.get("name")).name
+                    self.check_coherence(manifest_aux, jo_aux_files[role], prod_name.stem)
+                    checked_roles.add(role)
+
+            for role in jo_aux_files.keys() - checked_roles:
+                denoise_logger.warning(f"{role} not referenced in the manifest of {prod_name.stem}: "
+                                       f"cannot verify that {jo_aux_files[role]} was used to process the input data.")
     
     def check_coherence(self, manifest, jo_aux_file, prod):
         """

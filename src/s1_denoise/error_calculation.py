@@ -116,8 +116,8 @@ def build_common_grid(times1, pixels_list1, times2, pixels_list2):
     """
     Compute a common range pixel and azimuth time grid for two sets of noise range vectors.
 
-    Both axes have 1500 points spanning the overlap of the two sets. Azimuth times are expressed in seconds relative to
-    the first vector of each set.
+    Both axes have 1500 points spanning the overlap of the two sets. Azimuth times of both sets are expressed in seconds
+    relative to the same reference, the first vector of the first set, so that the two sets are aligned in time.
 
     Parameters
     ----------
@@ -131,9 +131,9 @@ def build_common_grid(times1, pixels_list1, times2, pixels_list2):
     common_pixels : numpy.ndarray
         Common range pixel axis.
     times1_sec : numpy.ndarray
-        Azimuth times of the first set [s], relative to its first vector.
+        Azimuth times of the first set [s], relative to the first vector of the first set.
     times2_sec : numpy.ndarray
-        Azimuth times of the second set [s], relative to its first vector.
+        Azimuth times of the second set [s], relative to the first vector of the first set.
     common_times_sec : numpy.ndarray
         Common azimuth time axis [s].
     """
@@ -146,9 +146,10 @@ def build_common_grid(times1, pixels_list1, times2, pixels_list2):
 
     common_pixels = np.linspace(min_pixel, max_pixel, 1500)
 
-    # Convert azimuth time to seconds
-    times1_sec = np.array([(t - times1[0]) for t in times1])
-    times2_sec = np.array([(t - times2[0]) for t in times2])
+    # Convert azimuth time to seconds, using a common reference time for both sets
+    t_ref = times1[0]
+    times1_sec = np.array([float(t - t_ref) for t in times1])
+    times2_sec = np.array([float(t - t_ref) for t in times2])
 
     common_times_sec = np.linspace(
         max(times1_sec[0], times2_sec[0]),

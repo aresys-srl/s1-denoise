@@ -25,9 +25,10 @@ test/fonts
 test/*.png
 
 # Documentation
-technical_note/**/*.png
-technical_note/**/*.jpg
-technical_note/*.typ
+technical_note/fonts/
+technical_note/img/
+technical_note/template_images/
+technical_note/aresys_template.typ
 
 # Sentinel-1 data & products
 *.SAFE

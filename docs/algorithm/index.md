@@ -31,7 +31,7 @@ auxiliary files, as follows:
 | Term | Name | Source |
 |------|------|--------|
 | $P_n(i)$ | Noise power | Noise list annotated in the product annotation XML, or [extracted from the L0N product](noise-power-extraction.md) if provided |
-| $G_{\text{pg}}(i)$ | Internal calibration (PG) gain correction | Replica list annotated in the product annotation XML, corrected for $PG_{\text{ref}}$ and interpolated at the burst center |
+| $G_{\text{pg}}(i)$ | Internal calibration (PG) gain correction | Replica list annotated in the product annotation XML (only records with both `relativePgProductValidFlag` and `absolutePgProductValidFlag` set to `true`), corrected for $PG_{\text{ref}}$ and interpolated at the burst center |
 | $G_{\text{ds}}(i)$ | De-scalloping function (azimuth elementary antenna pattern gain) | Noise azimuth vectors, unchanged (TopSAR data only) |
 | $G_{\text{eap}}(i,j)$ | Elevation antenna pattern gain | Antenna pattern list annotated in the product annotation XML, re-interpolated over the denoising vector axis |
 | $G_{\text{rsl}}(j)$ | Range spreading loss correction | Computed from slant range times (see below) |

@@ -8,7 +8,7 @@ Defines the package version, the processor name used in log records, the referen
 (in meters) and the noise pulse outlier detection bounds ``NOISE_LOWER_BOUND`` / ``NOISE_UPPER_BOUND`` (in dB).
 """
 
-__version__ = '1.1.0'
+__version__ = '1.2.0.dev0'
 
 PROCESSOR_NAME = 's1_l1n_processor'
 

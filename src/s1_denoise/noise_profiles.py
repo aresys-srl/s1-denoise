@@ -238,7 +238,8 @@ def grd_processing(safe, aux_files, dn_value, noise_power_correction):
         simulated_noises.append(OutputNoiseVectors_GRD(adsHeader=ads_header, 
                                                        swath_merges=swath_merging_info, 
                                                        noiseRangeVectors=sim_noises,
-                                                       dn_value=dn_value))
+                                                       dn_value=dn_value,
+                                                       azimuth_time_interval=float(metadata_dict['product']['imageAnnotation']['imageInformation']['azimuthTimeInterval'])))
 
     return simulated_noises
 

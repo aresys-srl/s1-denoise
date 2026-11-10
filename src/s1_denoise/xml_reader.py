@@ -39,6 +39,39 @@ def read_metadata_from_safe_annotation(annotation):
 
     return dict(xmltodict.parse(xmlstr))
 
+def add_single_swath_merge(metadata_dict):
+    """
+    Fill the empty swath merge list of a single-swath GRD product with one record covering the whole image.
+
+    Stripmap GRD products have no swath merging, so their ``swathMergeList`` is empty. A record for the swath of the
+    product (``adsHeader/swath``), bounded by the first and last line and sample of the image, lets the swath bounds
+    be handled as for TOPSAR GRD products. The dictionary is modified in place.
+
+    Parameters
+    ----------
+    metadata_dict : dict
+        Annotation dictionary, as returned by `read_metadata_from_safe_annotation`.
+    """
+
+    product = metadata_dict['product']
+    image_info = product['imageAnnotation']['imageInformation']
+    product['swathMerging']['swathMergeList'] = {
+        '@count': '1',
+        'swathMerge': {
+            'swath': product['adsHeader']['swath'],
+            'swathBoundsList': {
+                '@count': '1',
+                'swathBounds': {
+                    'azimuthTime': image_info['productFirstLineUtcTime'],
+                    'firstAzimuthLine': '0',
+                    'firstRangeSample': '0',
+                    'lastAzimuthLine': str(int(image_info['numberOfLines']) - 1),
+                    'lastRangeSample': str(int(image_info['numberOfSamples']) - 1)
+                }
+            }
+        }
+    }
+
 def create_slant_range_times(metadata_dict, subswath = None, az_t0 = None):
     """
     Create the two-way slant range time axis of the image range samples.

@@ -20,7 +20,7 @@ from perseo_core.timing import PreciseDateTime
 # Local imports
 from s1_denoise.logger import denoise_logger
 from s1_denoise.s1safe import S1Safe
-from s1_denoise.xml_reader import create_slant_range_times, read_metadata_from_safe_annotation
+from s1_denoise.xml_reader import create_slant_range_times, read_metadata_from_safe_annotation, add_single_swath_merge
 from s1_denoise.thermal_noise import ThermalNoise
 from s1_denoise.auxiliary_files import AuxiliaryFiles
 from s1_denoise.output import OutputNoiseVectors_SLC, OutputNoiseVectors_GRD
@@ -59,7 +59,8 @@ def slc_processing(safe, aux_files, dn_value, noise_power_correction):
     Generate the simulated noise range vectors of an SLC product.
 
     For each polarization/subswath channel, one noise vector is computed per burst, at the burst center azimuth
-    time, on the slant range axis of the swath.
+    time, on the slant range axis of the swath. Stripmap products have no bursts: one noise vector is computed for
+    each antenna pattern record falling inside the image, at the azimuth time of the record.
 
     Parameters
     ----------
@@ -92,10 +93,10 @@ def slc_processing(safe, aux_files, dn_value, noise_power_correction):
         lines_per_burst = int(metadata_dict['product']['swathTiming']['linesPerBurst'])
         az_dt = float(metadata_dict['product']['imageAnnotation']['imageInformation']['azimuthTimeInterval'])
 
-        thermal_noise = ThermalNoise(metadata_dict=metadata_dict, 
-                                     channel=channel, 
+        thermal_noise = ThermalNoise(metadata_dict=metadata_dict,
+                                     channel=channel,
                                      aux_info=aux_files,
-                                     product_id=safe.path.stem[4:13],
+                                     product_id=safe.product_id,
                                      noise_power_from_l0=noise_power_correction)
 
         sim_noises = {}
@@ -107,25 +108,54 @@ def slc_processing(safe, aux_files, dn_value, noise_power_correction):
 
         denoise_logger.info(f"Generating noise profiles for subswath {subswath} ({pol})")
 
-        for rel_burst in range(channel.num_bursts):
+        if safe.is_stripmap():
+            # no bursts: one vector for each antenna pattern record falling inside the image, at the record time
+            image_info = metadata_dict['product']['imageAnnotation']['imageInformation']
+            first_line_time = PreciseDateTime.from_utc_string(image_info['productFirstLineUtcTime'])
+            number_of_lines = int(image_info['numberOfLines'])
+            antenna_patterns = channel.annotation.findall('antennaPattern/antennaPatternList/antennaPattern')
 
-            denoise_logger.debug(f"Generating noise profiles for burst {rel_burst+1} ({pol}, {subswath})")
+            for index, antenna_pattern in enumerate(antenna_patterns):
 
-            az_t0 = PreciseDateTime.from_utc_string((channel.annotation.find('antennaPattern/antennaPatternList/antennaPattern[{}]/azimuthTime'.format(rel_burst+1)).text))
+                az_t0 = PreciseDateTime.from_utc_string(antenna_pattern.findtext('azimuthTime'))
+                line = int(np.round((az_t0 - first_line_time) / az_dt))
+                if not 0 <= line < number_of_lines:
+                    continue
 
-            az_central_time = az_t0 + az_dt * lines_per_burst/2
+                denoise_logger.debug(f"Generating noise profiles for block {index+1} ({pol}, {subswath})")
 
-            # create simulated noise
-            thermal_noise.rel_burst = rel_burst
-            thermal_noise.get_shrink_factor()
-            
-            sim_noise, sin_incidence = thermal_noise.compute_simulated_noise(az_central_time)
+                thermal_noise.rel_burst = index
+                thermal_noise.get_shrink_factor()
 
-            start_az_time = az_t0.isoformat(sep="T", timespec="microseconds").rstrip("Z")
+                sim_noise, sin_incidence = thermal_noise.compute_simulated_noise(az_t0)
 
-            sim_noises.update({
-                (rel_burst, start_az_time): (sim_noise, geo_grid_info, sin_incidence, dn_value)
-            })
+                start_az_time = az_t0.isoformat(sep="T", timespec="microseconds").rstrip("Z")
+
+                sim_noises.update({
+                    (index, start_az_time): (sim_noise, geo_grid_info, sin_incidence, dn_value, line)
+                })
+
+        else:
+            for rel_burst in range(channel.num_bursts):
+
+                denoise_logger.debug(f"Generating noise profiles for burst {rel_burst+1} ({pol}, {subswath})")
+
+                az_t0 = PreciseDateTime.from_utc_string((channel.annotation.find('antennaPattern/antennaPatternList/antennaPattern[{}]/azimuthTime'.format(rel_burst+1)).text))
+
+                az_central_time = az_t0 + az_dt * lines_per_burst/2
+
+                # create simulated noise
+                thermal_noise.rel_burst = rel_burst
+                thermal_noise.get_shrink_factor()
+
+                sim_noise, sin_incidence = thermal_noise.compute_simulated_noise(az_central_time)
+
+                start_az_time = az_t0.isoformat(sep="T", timespec="microseconds").rstrip("Z")
+
+                # the line of the vector is taken from the geolocation grid
+                sim_noises.update({
+                    (rel_burst, start_az_time): (sim_noise, geo_grid_info, sin_incidence, dn_value, None)
+                })
         
         # Append it
         simulated_noises.append(OutputNoiseVectors_SLC(adsHeader=ads_header, noiseRangeVectors=sim_noises))
@@ -138,7 +168,8 @@ def grd_processing(safe, aux_files, dn_value, noise_power_correction):
 
     For each polarization, the subswaths merged in the annotation are processed separately: one noise vector is
     computed in slant range for each antenna pattern record (block) of the subswath and converted to ground range.
-    The subswaths are then merged into cross-subswath noise vectors by `OutputNoiseVectors_GRD`.
+    The subswaths are then merged into cross-subswath noise vectors by `OutputNoiseVectors_GRD`. Stripmap products
+    have a single swath, covering the whole image (see `xml_reader.add_single_swath_merge`).
 
     Parameters
     ----------
@@ -168,6 +199,10 @@ def grd_processing(safe, aux_files, dn_value, noise_power_correction):
         metadata_dict = read_metadata_from_safe_annotation(channel.annotation)
         ads_header = metadata_dict['product']['adsHeader']
 
+        # stripmap: single swath, no swath merging
+        if safe.is_stripmap():
+            add_single_swath_merge(metadata_dict)
+
         count_noise_list = int(channel.annotation.find('generalAnnotation/noiseList').attrib['count'])
         antenna_patterns = channel.annotation.findall('antennaPattern/antennaPatternList/antennaPattern')
         swath_merging_info = ensure_list(metadata_dict['product']['swathMerging']['swathMergeList']['swathMerge'])
@@ -196,7 +231,7 @@ def grd_processing(safe, aux_files, dn_value, noise_power_correction):
             thermal_noise = ThermalNoise(metadata_dict=metadata_dict, 
                                          channel=channel, 
                                          aux_info=aux_files, 
-                                         product_id=safe.path.stem[4:13],
+                                         product_id=safe.product_id,
                                          noise_power_from_l0=noise_power_correction,
                                          subswath=subswath)
 

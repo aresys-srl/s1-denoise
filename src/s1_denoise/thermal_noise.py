@@ -403,11 +403,22 @@ class ThermalNoise:
         if noise_power_from_l0 is None:
             noise_power_correction_factors, noise_az_t = read_noise_power_correction_from_annotation(self.metadata_dict, self.swath_id)
         else:
-            noise_az_t = noise_power_from_l0.get((self.swath_id,self.polarization))[0]
-            noise_power_correction_factors = noise_power_from_l0.get((self.swath_id,self.polarization))[1]
+            if (self.swath_id, self.polarization) not in noise_power_from_l0:
+                raise ValueError(f"No noise measurements for {self.swath_id} {self.polarization} in the L0N product "
+                                 f"(available: {', '.join(' '.join(k) for k in noise_power_from_l0)})")
+            noise_az_t, noise_power_correction_factors = noise_power_from_l0[(self.swath_id, self.polarization)]
+
+            # stripmap: the IPF annotates the noise measurements at the packet sensing time shifted by a constant
+            # offset (the sensing to zero-Doppler shift of the data-take), so the L0N times are aligned to the
+            # annotated noise list
+            if self.product_id.startswith('SM'):
+                noise_az_t = self.align_l0n_noise_times(noise_az_t)
 
         # discard noise pulses
-        self.noise_az_t, self.noise_power_correction_factors, self.outlier_detected = remove_outliers(noise_az_t, noise_power_correction_factors, self.expected_noise_value)
+        self.noise_az_t, self.noise_power_correction_factors, self.outlier_detected = remove_outliers(
+            azimuth_times = noise_az_t, 
+            noise_pulses = noise_power_correction_factors,
+            expected_noise_value = self.expected_noise_value)
 
         for ind in range(len(self.outlier_detected)):
             formatted = self.outlier_detected[ind][1].isoformat(timespec="microseconds").rstrip("Z")
@@ -418,6 +429,36 @@ class ThermalNoise:
             denoise_logger.warning(f"All noise pulses discarded for {self.swath_id} {self.polarization}: using nominal noise value from AUX_INS")
             self.noise_az_t = np.array(noise_az_t)
             self.noise_power_correction_factors = np.full(self.noise_az_t.size, self.expected_noise_value)
+
+    def align_l0n_noise_times(self, noise_az_t):
+        """
+        Shift the L0N noise measurement times onto the time reference of the annotated noise list.
+
+        The offset is the difference between the first annotated noise time and the first L0N noise time. It is used
+        for stripmap products, where the annotated noise times are the L0N packet times shifted by a constant
+        offset of the data-take (about 0.4 s), not derivable from the GRD annotation.
+
+        Parameters
+        ----------
+        noise_az_t : list of PreciseDateTime
+            Times of the L0N noise measurements.
+
+        Returns
+        -------
+        list of PreciseDateTime
+            Shifted times, or `noise_az_t` unchanged (with a warning) if the annotated noise list is empty.
+        """
+
+        _, annotated_az_t = read_noise_power_correction_from_annotation(self.metadata_dict, self.swath_id)
+        if len(annotated_az_t) == 0 or len(noise_az_t) == 0:
+            denoise_logger.warning(f"No annotated noise times for {self.swath_id} {self.polarization}: "
+                                   "L0N noise times are not aligned")
+            return noise_az_t
+
+        offset = annotated_az_t[0] - noise_az_t[0]
+        denoise_logger.debug(f"L0N noise times shifted by {offset:.6f} s to match the annotated noise list")
+
+        return [t + offset for t in noise_az_t]
 
     def noise_power_computation(self, azimuth_T):
         """

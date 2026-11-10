@@ -102,7 +102,10 @@ def create_slant_range_times(metadata_dict, subswath = None, az_t0 = None):
 
 def read_pg_correction_list(annotation, swath_id):
     """
-    Read the PG product amplitudes annotated in the replica information of a swath.
+    Read the valid PG product amplitudes annotated in the replica information of a swath.
+
+    Only replica records with both ``relativePgProductValidFlag`` and ``absolutePgProductValidFlag`` set to ``true``
+    are kept; each discarded record is reported with a warning.
 
     Parameters
     ----------
@@ -114,26 +117,39 @@ def read_pg_correction_list(annotation, swath_id):
     Returns
     -------
     pg_correction : numpy.ndarray
-        ``pgProductAmplitude`` values, one per replica record.
+        ``pgProductAmplitude`` values of the valid replica records.
     az_t : numpy.ndarray
-        Azimuth times of the replica records, as PreciseDateTime objects.
+        Azimuth times of the valid replica records, as PreciseDateTime objects.
+
+    Raises
+    ------
+    ValueError
+        If a replica record of the swath lacks the PG amplitude, the azimuth time or one of the validity flags.
     """
 
     pg_correction = []
     az_t = []
 
-    data = annotation.findall('generalAnnotation/replicaInformationList/replicaInformation/swath')
-    for ind, element in enumerate(data):
-        if element.text == swath_id:
+    for replica_info in annotation.iterfind('generalAnnotation/replicaInformationList/replicaInformation'):
+        if replica_info.findtext('swath') != swath_id:
+            continue
 
-            pg_correction_list = annotation.findall('generalAnnotation/replicaInformationList/replicaInformation[{}]/replicaList/replica/pgProductAmplitude'.format(ind+1))
-            az_t_list = annotation.findall('generalAnnotation/replicaInformationList/replicaInformation[{}]/replicaList/replica/azimuthTime'.format(ind+1))
+        for replica in replica_info.iterfind('replicaList/replica'):
+            amplitude = replica.findtext('pgProductAmplitude')
+            azimuth_time = replica.findtext('azimuthTime')
+            relative_valid = replica.findtext('relativePgProductValidFlag')
+            absolute_valid = replica.findtext('absolutePgProductValidFlag')
 
-            for t_ind, t in enumerate(az_t_list):
-                pg_correction.append(float(pg_correction_list[t_ind].text))
-                az_t.append(t.text)
-    
-        
+            if None in (amplitude, azimuth_time, relative_valid, absolute_valid):
+                raise ValueError(f"Incomplete PG replica record for swath {swath_id}")
+
+            # keep only PG values flagged as valid
+            if relative_valid == 'true' and absolute_valid == 'true':
+                pg_correction.append(float(amplitude))
+                az_t.append(azimuth_time)
+            else:
+                denoise_logger.warning(f"Discarding PG replica record at azimuth time {azimuth_time} for swath {swath_id}")
+
     return np.array(pg_correction), np.array(convert_az_times(az_t))
 
 def read_noise_power_correction_from_annotation(metadata_dict, swath_id):

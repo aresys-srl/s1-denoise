@@ -174,17 +174,18 @@ class OutputNoiseVectors_SLC:
     adsHeader : dict
         `adsHeader` section of the product annotation.
     noiseRangeVectors : dict
-        Simulated noise per burst, mapping ``(burst_index, start_azimuth_time)`` to
-        ``(noise, geolocation_grid, sin_incidence, dn_value)``, where `noise` is the slant range simulated noise,
-        `geolocation_grid` the `geolocationGrid` annotation section, `sin_incidence` the sine of the incidence angles
-        and `dn_value` the digital number calibration value.
+        Simulated noise per burst (or per antenna pattern block for stripmap), mapping
+        ``(burst_index, start_azimuth_time)`` to ``(noise, geolocation_grid, sin_incidence, dn_value, line)``, where
+        `noise` is the slant range simulated noise, `geolocation_grid` the `geolocationGrid` annotation section,
+        `sin_incidence` the sine of the incidence angles, `dn_value` the digital number calibration value and `line`
+        the line of the vector, or None to use the geolocation grid line of the burst.
 
     Attributes
     ----------
     ads_header : dict
         `adsHeader` section of the product annotation.
     noise_range_vectors : list of NoiseRangeVector_SLC
-        One noise range vector per burst, at the geolocation grid line of the burst.
+        One noise range vector per burst (or block), at its line.
     vector_count : int
         Number of noise range vectors.
     """
@@ -204,13 +205,14 @@ class OutputNoiseVectors_SLC:
             geo_grid_info = noise_values[1]
             sin_incidence = noise_values[2]
             dn_value = noise_values[3]
+            line = noise_values[4]
 
             # the geolocation grid is the same for all the bursts of the swath
             if geo_grid_lines is None:
                 geo_grid_lines, pixels = get_lines_and_pixels(geo_grid_info)
 
             noise_range_vec = NoiseRangeVector_SLC(start_az_time,
-                                                   geo_grid_lines[rel_burst],
+                                                   geo_grid_lines[rel_burst] if line is None else line,
                                                    pixels,
                                                    sim_noise,
                                                    sin_incidence,

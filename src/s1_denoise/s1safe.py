@@ -6,7 +6,7 @@ Module providing classes and utilities for reading and handling Sentinel-1 SAFE 
 
 Defines S1Safe, S1Channel, and S1Roi as the primary abstractions for accessing
 product metadata, annotation, noise, calibration, RFI, and measurement files across
-TopSAR acquisition modes (IW, EW). Also provides functions for noise map
+the IW, EW, stripmap and wave acquisition modes. Also provides functions for noise map
 computation, calibration vector interpolation, and SAFE filename parsing.
 """
 
@@ -352,26 +352,47 @@ def compute_noise_map(noise_et_root, data_size, roi):
 
 def subswaths_from_mode(mode_name):
     """
-    Return the swath identifiers of an acquisition mode.
+    Return the swath identifiers of a TOPSAR or wave acquisition mode.
 
     Parameters
     ----------
     mode_name : str
-        Acquisition mode (``IW``, ``EW``, ``WV`` or a stripmap mode ``S1``..``S6``).
+        Acquisition mode (``IW``, ``EW`` or ``WV``).
 
     Returns
     -------
     tuple of str
-        Swath identifiers (e.g. ``('IW1', 'IW2', 'IW3')``); for stripmap modes, the mode itself.
+        Swath identifiers (e.g. ``('IW1', 'IW2', 'IW3')``).
 
     Raises
     ------
     KeyError
         If the mode is not supported.
     """
-    if is_stripmap_mode(mode_name):
-        return (mode_name,)
     return _subswaths[mode_name]
+
+
+def swaths_from_safe_name(safe_name):
+    """
+    Return the swath identifiers of the channels of a SAFE product.
+
+    Parameters
+    ----------
+    safe_name : str
+        SAFE product name.
+
+    Returns
+    -------
+    tuple of str
+        Swath identifiers: the beam (``S1``..``S6``) for stripmap products, the mode (``IW``, ``EW``) for TOPSAR GRD
+        products, the subswaths of the mode otherwise (e.g. ``('IW1', 'IW2', 'IW3')``).
+    """
+    mode = mode_from_safe_name(safe_name)
+    if is_stripmap_mode(mode):
+        return (safe_name[4:6],)
+    if is_grd(safe_name):
+        return (mode,)
+    return subswaths_from_mode(mode)
 
 
 def mode_from_safe_name(safe_name):
@@ -386,9 +407,24 @@ def mode_from_safe_name(safe_name):
     Returns
     -------
     str
-        Two-character acquisition mode (e.g. ``IW``).
+        Acquisition mode: ``IW``, ``EW``, ``WV``, or ``SM`` for the stripmap beams ``S1``..``S6``.
+
+    Raises
+    ------
+    ValueError
+        If the mode field of the name is not a supported acquisition mode.
     """
-    return safe_name[4:6]
+
+    if safe_name[4:6] == 'IW':
+        return 'IW'
+    elif safe_name[4:6] == 'EW':
+        return 'EW'
+    elif safe_name[4:6] in ['S1', 'S2', 'S3', 'S4', 'S5', 'S6']:
+        return 'SM'
+    elif safe_name[4:6] == 'WV':
+        return 'WV'
+    else:
+        raise ValueError(f"Unsupported acquisition mode in SAFE name: {safe_name[4:6]}")
 
 
 def product_type_from_safe_name(safe_name):
@@ -515,11 +551,9 @@ def is_stripmap_mode(mode_name):
     Returns
     -------
     bool
-        ``True`` if the mode starts with ``S`` (``S1``..``S6``).
+        ``True`` for ``SM``, ``False`` otherwise.
     """
-    if mode_name[:1] == 'S':
-        return True
-    return False
+    return mode_name == 'SM'
 
 
 def is_stripmap(safe_name):
@@ -908,9 +942,11 @@ class S1Safe:
     manifest : xml.etree.ElementTree.ElementTree
         Parsed ``manifest.safe``.
     mode : str
-        Acquisition mode (e.g. ``IW``, ``EW``).
+        Acquisition mode (``IW``, ``EW``, ``SM`` or ``WV``).
     product_type : str
         Product type (e.g. ``SLC``, ``GRDH``).
+    product_id : str
+        Product identifier used to select the AUX_PP1 parameters (e.g. ``IW_SLC__1``, ``SM_GRDH_1``).
 
     Raises
     ------
@@ -927,13 +963,15 @@ class S1Safe:
         self.manifest = ET.parse(self.path / 'manifest.safe')
         self.mode = mode_from_safe_name(self.name)
         self.product_type = product_type_from_safe_name(self.name)
+        self.product_id = self.mode + self.name[6:13]
         self._channels = self._build_channels_dict()
 
     def _build_channels_dict(self):
         """
         Build the channels of the product.
 
-        GRD products have a single swath named after the mode. Wave mode channels are discovered from the measurement
+        Stripmap products have a single swath named after the beam (``S1``..``S6``), TOPSAR GRD products a single swath
+        named after the mode (see `swaths_from_safe_name`). Wave mode channels are discovered from the measurement
         files. A missing measurement file (annotation-only product) results in a channel without measurement.
 
         Returns
@@ -943,12 +981,8 @@ class S1Safe:
         """
         channels = dict()
         pol_list = polarizations_from_safe_name(self.name)
-        if self.is_grd():
-            swath_id_list = [self.mode]
-        else:
-            swath_id_list = subswaths_from_mode(self.mode)
+        swath_id_list = swaths_from_safe_name(self.name)
 
-        
         if self.mode == 'WV':
             for filename in os.listdir(os.path.join(self.path, 'measurement')):
                 swath_id = filename.split('-')[1].upper()

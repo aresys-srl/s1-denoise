@@ -16,12 +16,15 @@ from scipy.interpolate import interp1d, RegularGridInterpolator
 from perseo_core.timing import PreciseDateTime
 
 from s1_denoise.utils import linear_to_db
+from s1_denoise.s1safe import mode_from_safe_name
 
 DN_VALUES = {
     ("IW", "SLC"): 237,
     ("IW", "GRD"): 474,
     ("EW", "SLC"): 543,
-    ("EW", "GRD"): 1087
+    ("EW", "GRD"): 1087,
+    ("SM", "SLC"): 84.95,
+    ("SM", "GRD"): 169.91
 }
 
 def read_noise_xml(path):
@@ -258,7 +261,7 @@ def calculate_error(nominal_noise_filepath, denoise_filepath):
     """
 
     product_name = nominal_noise_filepath.parent.parent.parent.stem
-    mode = product_name[4:6]
+    mode = mode_from_safe_name(product_name)
     prod_type = product_name[7:10]
     dn = DN_VALUES.get((mode, prod_type))
     if dn is None:

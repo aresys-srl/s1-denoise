@@ -224,9 +224,9 @@ class OutputNoiseVectors_GRD:
     """
     Output cross-subswath noise range vectors of a GRD channel (polarization).
 
-    The noise vectors of each subswath are extended in azimuth to the full scene extent (see `extend_noise_grd`),
-    then, for each azimuth time step, concatenated along range according to the swath merging boundaries,
-    removing the samples of the previous subswath that fall in the overlap region.
+    The noise vectors of each subswath are interpolated in azimuth on the output lines of the IPF noise annotation
+    (see `grd_noise_lines` and `extend_noise_grd`), then, for each output line, concatenated along range according to
+    the swath merging boundaries, removing the samples of the previous subswath that fall in the overlap region.
 
     Parameters
     ----------
@@ -239,18 +239,20 @@ class OutputNoiseVectors_GRD:
         ``(azimuth_time, noise, sin_incidence)``, with the noise in ground range.
     dn_value : float
         Digital number calibration value from AUX_PP1.
+    azimuth_time_interval : float
+        Azimuth time interval between consecutive lines of the image [s].
 
     Attributes
     ----------
     ads_header : dict
         `adsHeader` section of the product annotation.
     noise_range_vectors : list of NoiseRangeVector_GRD
-        One merged noise range vector per azimuth time step.
+        One merged noise range vector per output line.
     vector_count : int
         Number of noise range vectors.
     """
 
-    def __init__(self, adsHeader: dict, swath_merges, noiseRangeVectors, dn_value):
+    def __init__(self, adsHeader: dict, swath_merges, noiseRangeVectors, dn_value, azimuth_time_interval):
 
         self.ads_header = adsHeader
         self.noise_range_vectors = []
@@ -258,15 +260,11 @@ class OutputNoiseVectors_GRD:
         # Collect unique subswath identifiers preserving their order
         subswaths = list(dict.fromkeys(key[1] for key in noiseRangeVectors))
 
-        # Determine the total number of azimuth lines across all swath boundaries
-        max_lines = max(
-            int(d['lastAzimuthLine'])
-            for p in swath_merges
-            for d in ensure_list(p['swathBoundsList']['swathBounds'])
-        )
+        # Output lines of the noise vectors, as in the IPF noise annotation
+        lines = grd_noise_lines(swath_merges, azimuth_time_interval)
 
-        # Extend each subswath's noise vectors to cover the full azimuth extent
-        # Burst vectors are re-indexed sequentially and extrapolated to fill any gaps beyond the first/last burst up to the scene boundaries
+        # Interpolate each subswath's noise vectors on the output lines
+        # Block vectors are re-indexed sequentially and extrapolated to fill any gaps beyond the first/last block up to the scene boundaries
         subswath_extended = {}
         for subswath in subswaths:
             burst_indices = sorted(k[0] for k in noiseRangeVectors if k[1] == subswath)
@@ -275,11 +273,11 @@ class OutputNoiseVectors_GRD:
                 for j, burst_no in enumerate(burst_indices)
             }
             subswath_extended[subswath] = extend_noise_grd(
-                sw_vectors, self.ads_header['startTime'], self.ads_header['stopTime'], max_lines
+                sw_vectors, self.ads_header['startTime'], azimuth_time_interval, lines
             )
 
-        # Step 2: for each azimuth time step, concatenate subswaths in range.
-        # All subswaths share the same number of time steps after the extension above.
+        # Step 2: for each output line, concatenate subswaths in range.
+        # All subswaths share the same output lines after the extension above.
         tot_vec = len(next(iter(subswath_extended.values())))
 
         for i in range(tot_vec):
@@ -360,13 +358,47 @@ def calculate_pixel_line(pixel_bound_list):
 
     return pixel_string
 
-def extend_noise_grd(input_vectors, start_time, stop_time, max_lines):
+def grd_noise_lines(swath_merges, azimuth_time_interval):
     """
-    Extend the noise vectors of a GRD subswath to the full azimuth extent of the scene.
+    Return the output lines of the noise vectors of a GRD product, as in the IPF noise annotation.
 
-    The vectors are first resampled to a common length (the longest one), then linearly interpolated in azimuth on
-    a 1 s grid from `start_time` to `stop_time` (included). Values outside the input time span are held constant
-    at the first/last vector.
+    The lines are taken every ``round(1 / azimuth_time_interval)`` lines (about 1 s) from the first line, plus the
+    last line of the image. If they are not already included, the first and the last line covered by all the
+    subswaths are added as well (start and end of the full swath coverage at the data-take boundaries).
+
+    Parameters
+    ----------
+    swath_merges : list of dict
+        `swathMerge` entries of the product annotation.
+    azimuth_time_interval : float
+        Azimuth time interval between consecutive lines of the image [s].
+
+    Returns
+    -------
+    list of int
+        Sorted output lines.
+    """
+
+    swath_bounds = [ensure_list(swath_merge['swathBoundsList']['swathBounds']) for swath_merge in swath_merges]
+
+    last_line = max(int(b['lastAzimuthLine']) for bounds in swath_bounds for b in bounds)
+    step = int(np.round(1.0 / azimuth_time_interval))
+    lines = set(range(0, last_line, step)) | {last_line}
+
+    # first and last line covered by all the subswaths
+    first_full_line = max(min(int(b['firstAzimuthLine']) for b in bounds) for bounds in swath_bounds)
+    last_full_line = min(max(int(b['lastAzimuthLine']) for b in bounds) for bounds in swath_bounds)
+    lines |= {line for line in (first_full_line, last_full_line) if 0 < line < last_line}
+
+    return sorted(lines)
+
+def extend_noise_grd(input_vectors, start_time, azimuth_time_interval, lines):
+    """
+    Interpolate the noise vectors of a GRD subswath on the output lines of the scene.
+
+    The vectors are first resampled to a common length (the longest one), then linearly interpolated in azimuth at the
+    time of each output line, ``start_time + line * azimuth_time_interval``. Values outside the input time span are
+    held constant at the first/last vector.
 
     Parameters
     ----------
@@ -374,32 +406,25 @@ def extend_noise_grd(input_vectors, start_time, stop_time, max_lines):
         Noise vectors of the subswath, mapping consecutive indices from 0 to
         ``(azimuth_time, noise, sin_incidence)``, with the azimuth time in ISO format.
     start_time : str
-        Scene start time, in ISO format.
-    stop_time : str
-        Scene stop time, in ISO format.
-    max_lines : int
-        Total number of azimuth lines of the scene, used to compute the line number of each output vector.
+        Azimuth time of the first line of the scene, in ISO format.
+    azimuth_time_interval : float
+        Azimuth time interval between consecutive lines of the image [s].
+    lines : list of int
+        Output lines (see `grd_noise_lines`).
 
     Returns
     -------
     dict
         Extended noise vectors, mapping the output index to ``(azimuth_time, noise, sin_incidence, line)``, with
-        the azimuth time as ISO string and `noise`, `sin_incidence` as numpy.ndarray.
+        the azimuth time as ISO string (rounded to the microsecond) and `noise`, `sin_incidence` as numpy.ndarray.
     """
 
     output_vectors = dict()
 
-    # create new azimuth time axis
-    az_times_old = [iso_to_datetime(v[0]).sec85 for v in input_vectors.values()]
-    start_sec85 = iso_to_datetime(start_time).sec85
-    stop_sec85 = iso_to_datetime(stop_time).sec85
-    az_times_new = np.arange(start_sec85, stop_sec85, 1.0)
-
-    # add the stop time as last element, unless it is already there (compare in seconds, with tolerance)
-    if az_times_new.size == 0 or not np.isclose(az_times_new[-1], stop_sec85, rtol=0.0, atol=1e-6):
-        az_times_new = np.append(az_times_new, stop_sec85)
-    
-    tot_vec_out = len(az_times_new)
+    # azimuth times relative to the first line of the scene [s]
+    start = iso_to_datetime(start_time)
+    az_times_old = [iso_to_datetime(v[0]) - start for v in input_vectors.values()]
+    az_times_new = np.array(lines) * azimuth_time_interval
 
     target_len = max(len(input_vectors[j][1]) for j in range(len(input_vectors)))
 
@@ -433,19 +458,17 @@ def extend_noise_grd(input_vectors, start_time, stop_time, max_lines):
         bounds_error=False,
         fill_value=(sin_incidence_old[0], sin_incidence_old[-1])
     )
-    
+
     noise_new = interp_noise(az_times_new)
     sin_incidence_new = interp_sin_incidence(az_times_new)
 
-    delta_line = (az_times_new[-1] - az_times_new[0])/max_lines
+    for i, line in enumerate(lines):
 
-
-    for i in range(tot_vec_out):
-
-        line_number = int(np.round((az_times_new[i]-az_times_new[0])/delta_line))
+        # time rounded to the microsecond, as in the IPF noise annotation (isoformat truncates)
+        az_time = (start + az_times_new[i] + 0.5e-6).isoformat(timespec="microseconds").rstrip("Z")
 
         output_vectors.update({
-            i: (PreciseDateTime.from_sec85(az_times_new[i]).isoformat(timespec="microseconds").rstrip("Z"), noise_new[i, :], sin_incidence_new[i, :], line_number)
+            i: (az_time, noise_new[i, :], sin_incidence_new[i, :], line)
         })
 
     return output_vectors

@@ -20,6 +20,10 @@ Cluster (MPC) contract. Its purpose is to allow the **retro-calibration of the d
   activating the processing of L0N products with rank echoes);
 - to fix denoising vector bugs from IPF versions before 3.7.1, released in October 2023.
 
+!!! info "Technical Note"
+
+    The processor, its algorithm and its validation are described in detail in the Technical Note [MPC-0680](https://github.com/aresys-srl/s1-denoise/blob/main/technical_note/SAR-MPC-0680-ARE-030845_S1_L1_Noise_Processor_TN_v1_4.pdf) [[RD6]](API/bibliography.md#reference-documents), available in the `technical_note/` folder of the repository.
+
 <div class="result" markdown>
 
 [__Install__](install.md){ data-preview } : install the package from PyPI or from the release wheel

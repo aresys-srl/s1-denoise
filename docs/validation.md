@@ -9,7 +9,7 @@ tags:
 # Validation
 
 The reconstruction quality is measured by the **mean absolute error (MAE)** and the **maximum absolute error** between
-the noise maps annotated by the IPF and those reconstructed by the processor, over the whole acquisition, in dB.
+the noise maps annotated by the IPF and those reconstructed by the processor, over the whole acquisition, in dB. The complete validation results are reported in the processor Technical Note [[RD6]](API/bibliography.md#reference-documents).
 
 ## One day analysis
 

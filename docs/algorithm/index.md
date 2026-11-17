@@ -7,6 +7,10 @@ tags:
 
 # Algorithm
 
+!!! info
+
+    This section summarizes the algorithm described in the processor Technical Note [[RD6]](../API/bibliography.md#reference-documents) ([PDF](https://github.com/aresys-srl/s1-denoise/blob/main/technical_note/SAR-MPC-0680-ARE-030845_S1_L1_Noise_Processor_TN_v1_4.pdf)), which also reports additional details and the full validation results.
+
 ## Denoising vector model
 
 Thermal noise affects the quality of SAR images from both a radiometric and an interferometric point of view. The

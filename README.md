@@ -20,6 +20,8 @@ For each processed channel the processor:
 
 📖 **Documentation:** <https://opensource.aresys.it/s1-denoise/>
 
+📄 **Technical Note:** [MPC-0680 – S1 L1 Noise Processor TN, issue 1.4](technical_note/SAR-MPC-0680-ARE-030845_S1_L1_Noise_Processor_TN_v1_4.pdf)
+
 ---
 
 ## Installation

@@ -9,7 +9,8 @@ pulse (NOISE signal) packets where present (plain BAQ 5-bit, decoded by `s1_deno
 rank echo packets of the burst (FDBAQ, decoded with ``sentinel1decoder``).
 
 The per-burst samples are then filtered according to mission-specific rank echo sequences (IW/EW, S1A/B/C/D).
-Stripmap L0N products contain only the pre-amble and post-amble noise sequences, which are used as they are.
+Stripmap L0N products contain only the pre-amble and post-amble noise sequences, and wave mode L0N products only the
+noise sequences before and after each imagette: they are used as they are.
 """
 
 import re
@@ -53,7 +54,7 @@ def _packet_time(coarse_time, fine_time) -> PreciseDateTime:
 
 def _subswath_name(ecc_number, swath_num):
     """
-    Map an (ECC number, swath number) pair to a subswath label, e.g. ``"IW1"``, ``"EW3"`` or ``"S6"``.
+    Map an (ECC number, swath number) pair to a subswath label, e.g. ``"IW1"``, ``"EW3"``, ``"WV2"`` or ``"S6"``.
 
     Parameters
     ----------
@@ -65,13 +66,16 @@ def _subswath_name(ecc_number, swath_num):
     Returns
     -------
     str or None
-        Subswath label (stripmap beam ``S1``..``S6`` for stripmap ECC numbers), or None for other modes.
+        Subswath label (``IW1``..``IW3``, ``EW1``..``EW5``, ``WV1``/``WV2``, or stripmap beam ``S1``..``S6``
+        for stripmap ECC numbers), or None for other ECC numbers.
     """
 
     if ecc_number == ECCNumber.INTERFEROMETRIC_WIDE_SWATH:
         return f"IW{swath_num - 9}"
     if ecc_number == ECCNumber.EXTRA_WIDE_SWATH:
         return f"EW{swath_num - 19}"
+    if ecc_number == ECCNumber.WAVE_MODE:
+        return f"WV{swath_num - 29}"
     # stripmap, with or without interleaved calibration (S5 has north and south variants): the beam is given by the
     # ECC number (e.g. STRIPMAP_5_N_WO_INTERL_CAL -> S5), since the swath number does not match the beam number
     stripmap = re.match(r"STRIPMAP_([1-6])(_|$)", ecc_number.name)

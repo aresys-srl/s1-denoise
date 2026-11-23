@@ -174,7 +174,7 @@ class OutputNoiseVectors_SLC:
     adsHeader : dict
         `adsHeader` section of the product annotation.
     noiseRangeVectors : dict
-        Simulated noise per burst (or per antenna pattern block for stripmap), mapping
+        Simulated noise per burst (or per antenna pattern block for stripmap and wave mode), mapping
         ``(burst_index, start_azimuth_time)`` to ``(noise, geolocation_grid, sin_incidence, dn_value, line)``, where
         `noise` is the slant range simulated noise, `geolocation_grid` the `geolocationGrid` annotation section,
         `sin_incidence` the sine of the incidence angles, `dn_value` the digital number calibration value and `line`

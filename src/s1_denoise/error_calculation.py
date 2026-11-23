@@ -24,7 +24,8 @@ DN_VALUES = {
     ("EW", "SLC"): 543,
     ("EW", "GRD"): 1087,
     ("SM", "SLC"): 84.95,
-    ("SM", "GRD"): 169.91
+    ("SM", "GRD"): 169.91,
+    ("WV", "SLC"): 1001.1544
 }
 
 def read_noise_xml(path):

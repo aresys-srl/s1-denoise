@@ -17,10 +17,11 @@ import xml.etree.ElementTree as ET
 from s1_denoise.logger import denoise_logger
 
 FIELDS                  = ["Processor_Name", "Version", "Stdout_Log_Level", "Stderr_Log_Level", "Test", "Breakpoint_Enable"]
-INPUT_L0N_FILES         = ["IW_RAW__0N", "EW_RAW__0N", "SM_RAW__0N"]
+INPUT_L0N_FILES         = ["IW_RAW__0N", "EW_RAW__0N", "SM_RAW__0N", "WV_RAW__0N"]
 INPUT_PROCESSING_FILES  = ["IW_SLC__1A", "IW_SLC__1S", "IW_GRDH_1A", "IW_GRDH_1S", "IW_GRDM_1A", "IW_GRDM_1S",
                            "EW_SLC__1A", "EW_SLC__1S", "EW_GRDH_1A", "EW_GRDH_1S", "EW_GRDM_1A", "EW_GRDM_1S",
-                           "SM_SLC__1A", "SM_SLC__1S", "SM_GRDH_1A", "SM_GRDH_1S", "SM_GRDM_1A", "SM_GRDM_1S"]
+                           "SM_SLC__1A", "SM_SLC__1S", "SM_GRDH_1A", "SM_GRDH_1S", "SM_GRDM_1A", "SM_GRDM_1S",
+                           "WV_SLC__1A", "WV_SLC__1S"]
 INPUT_AUX_FILES         = ["AUX_PP1", "AUX_CAL", "AUX_INS"]
 INPUT_FILE_TYPES        = INPUT_L0N_FILES + INPUT_PROCESSING_FILES + INPUT_AUX_FILES
 OUTPUT_FILES_TYPES      = ["DENOISE"]
@@ -90,9 +91,10 @@ class JobOrder:
     input_files : list of dict
         All ``Input`` entries of the first ``Ipf_Proc``.
     input_files_to_process : list of dict
-        ``Input`` entries whose ``File_Type`` is an L1 product type (L1A/L1S SLC and GRD in IW, EW and Stripmap modes).
+        ``Input`` entries whose ``File_Type`` is an L1 product type (L1A/L1S SLC and GRD in IW, EW and Stripmap
+        modes, L1A/L1S SLC in Wave mode).
     input_l0n_files : list of pathlib.Path
-        Paths of the L0N input products (``IW_RAW__0N``, ``EW_RAW__0N``, ``SM_RAW__0N``).
+        Paths of the L0N input products (``IW_RAW__0N``, ``EW_RAW__0N``, ``SM_RAW__0N``, ``WV_RAW__0N``).
     aux_pp1_filepath : pathlib.Path
         Path of the AUX_PP1 auxiliary file.
     aux_cal_filepath : pathlib.Path

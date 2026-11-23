@@ -12,7 +12,6 @@ computation, calibration vector interpolation, and SAFE filename parsing.
 
 from pathlib import Path
 from datetime import datetime
-import os
 import xml.etree.ElementTree as ET
 from PIL import Image
 import numpy as np
@@ -971,8 +970,9 @@ class S1Safe:
         Build the channels of the product.
 
         Stripmap products have a single swath named after the beam (``S1``..``S6``), TOPSAR GRD products a single swath
-        named after the mode (see `swaths_from_safe_name`). Wave mode channels are discovered from the measurement
-        files. A missing measurement file (annotation-only product) results in a channel without measurement.
+        named after the mode (see `swaths_from_safe_name`). Wave mode channels, one per imagette, are discovered from
+        the annotation files. A missing measurement file (annotation-only product) results in a channel without
+        measurement.
 
         Returns
         -------
@@ -984,7 +984,7 @@ class S1Safe:
         swath_id_list = swaths_from_safe_name(self.name)
 
         if self.mode == 'WV':
-            for filename in os.listdir(os.path.join(self.path, 'measurement')):
+            for filename in sorted(p.name for p in self.path.glob('annotation/s1*.xml')):
                 swath_id = filename.split('-')[1].upper()
                 pol = filename.split('-')[3].upper()
                 img_num = (filename.split('.')[0]).split('-')[8]

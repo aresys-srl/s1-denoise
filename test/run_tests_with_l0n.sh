@@ -29,6 +29,8 @@ denoise job-orders/JobOrder.s1c-sm-grd-l0n.xml
 denoise job-orders/JobOrder.s1c-sm-grd.xml
 denoise job-orders/JobOrder.s1c-sm-slc-l0n.xml
 denoise job-orders/JobOrder.s1c-sm-slc.xml
+denoise job-orders/JobOrder.s1c-wv-slc-l0n.xml
+denoise job-orders/JobOrder.s1c-wv-slc.xml
 
 # S1D
 denoise job-orders/JobOrder.s1d-ew-grd-l0n.xml

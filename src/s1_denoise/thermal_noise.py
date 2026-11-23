@@ -9,7 +9,7 @@ Encapsulates the full noise modelling chain: noise power (from the L0N product o
 the annotation), elevation antenna pattern, range spreading loss, PG correction,
 processing gain, and noise normalization factor, the latter reconstructed from the
 azimuth antenna pattern on the azimuth FFT grid. Supports both SLC and GRD processing
-for the TopSAR (IW, EW) and stripmap modes.
+for the TopSAR (IW, EW) and stripmap modes, and SLC processing for the wave mode.
 """
 
 import numpy as np
@@ -78,7 +78,7 @@ class ThermalNoise:
     polarization : str
         Polarization of the channel.
     lines_per_burst : int
-        Number of lines per burst (1300 if annotated as 0, e.g. for GRD and stripmap products).
+        Number of lines per burst (1300 if annotated as 0, e.g. for GRD, stripmap and wave mode products).
     samples_per_burst : int
         Number of samples per burst.
     look_bandwidth, processing_bandwidth : float
@@ -107,7 +107,7 @@ class ThermalNoise:
         Discarded noise pulses, as ``[index, azimuth_time, noise_power]``.
     range_over_sampling_factor : float
         Ratio between the range sampling frequency after decimation and the range total bandwidth (1 for stripmap
-        products, whose IPF noise vectors are not corrected for it).
+        and wave mode products, whose IPF noise vectors are not corrected for it).
     rel_burst : int or None
         Index of the current burst (SLC) or antenna pattern block (GRD).
     range_t : numpy.ndarray or None
@@ -204,8 +204,8 @@ class ThermalNoise:
         # other info
         self.get_noise_power_correction(noise_power_from_l0)
         self.range_over_sampling_factor = self.sampling_freq_afterdecimation() / self.rg_bandwidth()
-        # the IPF stripmap noise vectors are not corrected for the range oversampling factor
-        if self.product_id.startswith('SM'):
+        # the IPF stripmap and wave mode noise vectors are not corrected for the range oversampling factor
+        if self.product_id.startswith(('SM', 'WV')):
             self.range_over_sampling_factor = 1.0
         self.rel_burst = None # burst (SLC) or antenna pattern block index
         self.range_t = None
@@ -410,10 +410,10 @@ class ThermalNoise:
                                  f"(available: {', '.join(' '.join(k) for k in noise_power_from_l0)})")
             noise_az_t, noise_power_correction_factors = noise_power_from_l0[(self.swath_id, self.polarization)]
 
-            # stripmap: the IPF annotates the noise measurements at the packet sensing time shifted by a constant
-            # offset (the sensing to zero-Doppler shift of the data-take), so the L0N times are aligned to the
-            # annotated noise list
-            if self.product_id.startswith('SM'):
+            # stripmap and wave mode: the IPF annotates the noise measurements at the packet sensing time shifted by
+            # a constant offset (the sensing to zero-Doppler shift of the data-take, or of the wave mode imagette),
+            # so the L0N times are aligned to the annotated noise list
+            if self.product_id.startswith(('SM', 'WV')):
                 noise_az_t = self.align_l0n_noise_times(noise_az_t)
 
         # discard noise pulses
@@ -437,8 +437,8 @@ class ThermalNoise:
         Shift the L0N noise measurement times onto the time reference of the annotated noise list.
 
         The offset is the difference between the first annotated noise time and the first L0N noise time. It is used
-        for stripmap products, where the annotated noise times are the L0N packet times shifted by a constant
-        offset of the data-take (about 0.4 s), not derivable from the GRD annotation.
+        for stripmap and wave mode products, where the annotated noise times are the L0N packet times shifted by a
+        constant offset of the data-take or imagette (about 0.3-0.4 s), not derivable from the GRD annotation.
 
         Parameters
         ----------
@@ -556,7 +556,8 @@ class ThermalNoise:
         Returns
         -------
         float
-            Squared AUX_PP1 gain divided by the range oversampling factor.
+            Squared AUX_PP1 gain divided by the range oversampling factor (`range_over_sampling_factor`, equal to 1
+            for stripmap and wave mode products).
         """
 
         k_proc = ( self.aux_pp1_calib / np.sqrt(self.range_over_sampling_factor) ) ** 2
@@ -638,7 +639,7 @@ class ThermalNoise:
         The shrink factor is $1 - k_{DC} / k_{FM}$, where $k_{FM}$ is the azimuth FM rate of the burst
         (`rel_burst`) and $k_{DC}$ the Doppler centroid rate derived from the AUX_INS azimuth steering rate,
         both evaluated at mid-range as in the IPF. It requires `range_t` and `rel_burst` to be set. For swaths without
-        antenna steering (stripmap, AUX_INS steering rate equal to zero) the shrink factor is 1.
+        antenna steering (stripmap and wave mode, AUX_INS steering rate equal to zero) the shrink factor is 1.
 
         Parameters
         ----------
@@ -655,7 +656,7 @@ class ThermalNoise:
         if self.range_t is None or self.rel_burst is None:
             raise ValueError("range_t and rel_burst must be set before computing the shrink factor")
 
-        # no antenna steering (stripmap): the Doppler centroid rate is zero, so the shrink factor is exactly 1
+        # no antenna steering (stripmap, wave mode): the Doppler centroid rate is zero, so the shrink factor is 1
         if self.azimuth_steering_rate == 0:
             self.shrink_factor = 1.0
             return

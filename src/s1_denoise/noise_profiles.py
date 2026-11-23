@@ -59,8 +59,9 @@ def slc_processing(safe, aux_files, dn_value, noise_power_correction):
     Generate the simulated noise range vectors of an SLC product.
 
     For each polarization/subswath channel, one noise vector is computed per burst, at the burst center azimuth
-    time, on the slant range axis of the swath. Stripmap products have no bursts: one noise vector is computed for
-    each antenna pattern record falling inside the image, at the azimuth time of the record.
+    time, on the slant range axis of the swath. Stripmap and wave mode products have no bursts: one noise vector is
+    computed for each antenna pattern record falling inside the image (or wave mode imagette), at the azimuth time of
+    the record.
 
     Parameters
     ----------
@@ -83,9 +84,9 @@ def slc_processing(safe, aux_files, dn_value, noise_power_correction):
     simulated_noises = []
 
     # loop on annotation files
-    for pol, subswath in safe._channels:
+    for channel_key, channel in safe._channels.items():
 
-        channel = safe.channel(pol, subswath)
+        pol, subswath = channel_key[:2]
         denoise_logger.info(f"Processing bursts from polarization {pol}, subswath {subswath}")        
 
         metadata_dict = read_metadata_from_safe_annotation(channel.annotation)
@@ -108,7 +109,7 @@ def slc_processing(safe, aux_files, dn_value, noise_power_correction):
 
         denoise_logger.info(f"Generating noise profiles for subswath {subswath} ({pol})")
 
-        if safe.is_stripmap():
+        if safe.is_stripmap() or safe.is_wave():
             # no bursts: one vector for each antenna pattern record falling inside the image, at the record time
             image_info = metadata_dict['product']['imageAnnotation']['imageInformation']
             first_line_time = PreciseDateTime.from_utc_string(image_info['productFirstLineUtcTime'])

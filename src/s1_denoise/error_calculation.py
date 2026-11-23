@@ -166,8 +166,10 @@ def compare_noise(noise_file, denoise_file, dn):
     """
     Compare nominal and reconstructed noise vectors on a common grid.
 
-    Both files are interpolated onto the grid of `build_common_grid` and normalised by ``dn**2``; zero values are set to
-    NaN and values are clipped at 1e-12 before conversion to dB.
+    Both files are interpolated onto the grid of `build_common_grid` and normalised by ``dn**2``; values are clipped at
+    1e-12 before conversion to dB. The grid points depending on a zero sample of the nominal noise (set by the IPF
+    beyond the valid swath edges, where the processor still computes the noise) are excluded from the comparison, as
+    well as the zero values of the reconstructed noise.
 
     Parameters
     ----------
@@ -217,12 +219,23 @@ def compare_noise(noise_file, denoise_file, dn):
         fill_value=np.nan,
     )
 
+    # validity of the nominal noise, interpolated as the noise: a grid point is valid only if all the nominal samples
+    # contributing to it are non-zero
+    interp_valid = interpolate_noise(pixels_list1, [(n != 0).astype(float) for n in noise_list], common_pixels)
+    f1_valid = RegularGridInterpolator(
+        (times1_sec, common_pixels),
+        interp_valid,
+        bounds_error=False,
+        fill_value=np.nan,
+    )
+
     T, P = np.meshgrid(common_times_sec, common_pixels, indexing="ij")
+    grid = np.stack([T, P], axis=-1)
 
-    noise = f1(np.stack([T, P], axis=-1)) / (dn**2)
-    denoise = f2(np.stack([T, P], axis=-1)) / (dn**2)
+    noise = f1(grid) / (dn**2)
+    denoise = f2(grid) / (dn**2)
 
-    noise[noise == 0] = np.nan
+    noise[~(f1_valid(grid) > 1 - 1e-9)] = np.nan
     denoise[denoise == 0] = np.nan
 
     diff_db = linear_to_db(np.maximum(np.abs(denoise), 1e-12)) - linear_to_db(np.maximum(np.abs(noise), 1e-12))

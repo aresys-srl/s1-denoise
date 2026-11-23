@@ -25,6 +25,10 @@ denoise job-orders/JobOrder.s1c-iw-grd-l0n.xml
 denoise job-orders/JobOrder.s1c-iw-grd.xml
 denoise job-orders/JobOrder.s1c-iw-slc-l0n.xml
 denoise job-orders/JobOrder.s1c-iw-slc.xml
+denoise job-orders/JobOrder.s1c-sm-grd-l0n.xml
+denoise job-orders/JobOrder.s1c-sm-grd.xml
+denoise job-orders/JobOrder.s1c-sm-slc-l0n.xml
+denoise job-orders/JobOrder.s1c-sm-slc.xml
 
 # S1D
 denoise job-orders/JobOrder.s1d-ew-grd-l0n.xml
@@ -52,7 +56,7 @@ import pandas as pd
 
 log_path, csv_path = sys.argv[1:3]
 
-pid_re = re.compile(r" (\d+\.\d+\.\d+) \[(\d+)\] \[[A-Z]\] (.*)$")
+pid_re = re.compile(r" (\d+\.\d+\.\d+\S*) \[(\d+)\] \[[A-Z]\] (.*)$")
 out_re = re.compile(r"Written output to .*/(([^/_]+)_([^/_]+)_([A-Z]{3})\w_1\w\w([HV])_(\d{4})(\d\d)(\d\d)T[^/]*)/([^/]+\.xml)")
 file_re = re.compile(r"denoise-[^-]+-([^-]+)-[^-]+-([hv]{2})-")
 mae_re = re.compile(r"[Mm]ean absolute error on denoising: ([0-9eE+.\-]+) dB")
@@ -72,6 +76,13 @@ with open(log_path) as f:
         elif m := out_re.search(msg):
             product, mission, mode, prod_type, pol, year, month, day, filename = m.groups()
             subswath, channel = file_re.match(filename).groups()
+            # stripmap products are named after the beam (S1..S6): grouped as SM, with the beam as subswath
+            if re.fullmatch(r"S[1-6]", mode):
+                mode, subswath = "SM", subswath.upper()
+            elif subswath == mode.lower():
+                subswath = "merged"
+            else:
+                subswath = subswath.upper()
             current[pid] = {
                 "Product": product,
                 "Date of acquisition": f"{year}/{month}/{day}",
@@ -80,7 +91,7 @@ with open(log_path) as f:
                 "Type": prod_type,
                 "Dual polarization": channel.upper(),
                 "Polarization": pol,
-                "Subswath": "merged" if subswath == mode.lower() else subswath.upper(),
+                "Subswath": subswath,
                 "with L0N?": "yes" if pid in l0n_pids else "no",
                 "Version": version,
             }

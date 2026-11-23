@@ -197,6 +197,8 @@ class ThermalNoise:
         # annotation info that does not change between bursts/blocks: read only once
         self.antenna_patterns = read_antenna_patterns(self.metadata_dict, self.swath_id)
         self.pg_correction_factors, self.pg_az_t = read_pg_correction_list(self.annotation, self.swath_id)
+        if self.pg_correction_factors.size == 0:
+            raise ValueError(f"No valid PG replica records annotated for swath {self.swath_id}: the PG correction cannot be computed")
         self.orbit = build_orbit(self.metadata_dict)
 
         # other info

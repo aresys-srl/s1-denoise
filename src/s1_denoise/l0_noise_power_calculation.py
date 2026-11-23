@@ -12,6 +12,7 @@ The per-burst samples are then filtered according to mission-specific rank echo 
 Stripmap L0N products contain only the pre-amble and post-amble noise sequences, which are used as they are.
 """
 
+import re
 import sys
 from pathlib import Path
 
@@ -71,9 +72,11 @@ def _subswath_name(ecc_number, swath_num):
         return f"IW{swath_num - 9}"
     if ecc_number == ECCNumber.EXTRA_WIDE_SWATH:
         return f"EW{swath_num - 19}"
-    # stripmap, with or without interleaved calibration (S5 has north and south variants)
-    if ecc_number.name.startswith("STRIPMAP") and 1 <= swath_num <= 6:
-        return f"S{swath_num}"
+    # stripmap, with or without interleaved calibration (S5 has north and south variants): the beam is given by the
+    # ECC number (e.g. STRIPMAP_5_N_WO_INTERL_CAL -> S5), since the swath number does not match the beam number
+    stripmap = re.match(r"STRIPMAP_([1-6])(_|$)", ecc_number.name)
+    if stripmap:
+        return f"S{stripmap.group(1)}"
     return None
 
 

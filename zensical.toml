@@ -39,6 +39,7 @@ nav = [
     "algorithm/noise-power-extraction.md",
     "algorithm/noise-pulse-discard.md",
     "algorithm/subswath-merging.md",
+    "algorithm/stripmap-wave.md",
     "algorithm/additional-annotations.md",
   ] },
   { "Validation" = "validation.md" },

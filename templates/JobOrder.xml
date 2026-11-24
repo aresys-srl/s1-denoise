@@ -2,7 +2,7 @@
 <Ipf_Job_Order>
 	<Ipf_Conf>
 		<Processor_Name>S1_L1N_IPF</Processor_Name>
-		<Version>1.1.0</Version>
+		<Version>1.2.0</Version>
 		<Stdout_Log_Level>INFO</Stdout_Log_Level>
 		<Stderr_Log_Level>INFO</Stderr_Log_Level>
 		<Test>false</Test>
@@ -18,7 +18,7 @@
 	<List_of_Ipf_Procs count="1">
 		<Ipf_Proc>
 			<Task_Name>S1_L1N_IPF</Task_Name>
-			<Task_Version>1.1.0</Task_Version>
+			<Task_Version>1.2.0</Task_Version>
 			<List_of_Inputs count="7">
 				<Input>
 					<File_Type>IW_SLC__1A</File_Type>

@@ -7,7 +7,7 @@
 
 #### Thermal noise vector reconstruction for Sentinel-1 Level 1 products
 
-The S1 L1N Processor reconstructs the thermal noise range vectors for Sentinel-1 IW and EW products (both SLC and GRD) and writes them to output XML files that follow the standard Sentinel-1 annotation format. The reconstructed vectors can then be compared against the nominal noise annotations embedded in the SAFE product to assess noise estimation quality.
+The S1 L1N Processor reconstructs the thermal noise range vectors for Sentinel-1 IW, EW and Stripmap products (both SLC and GRD) and Wave mode products (SLC) and writes them to output XML files that follow the standard Sentinel-1 annotation format. The reconstructed vectors can then be compared against the nominal noise annotations embedded in the SAFE product to assess noise estimation quality.
 
 For each processed channel the processor:
 

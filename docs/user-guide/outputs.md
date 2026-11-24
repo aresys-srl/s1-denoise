@@ -11,7 +11,8 @@ tags:
 The processor creates, inside the output directory set in the Job Order, a folder named after each input L1A/S
 product, containing the denoise files. The input SAFE products are never modified.
 
-The denoise files are split by subswath and polarization for SLC products, and by polarization only for GRD products.
+The denoise files are split by subswath and polarization for SLC products (and by imagette for Wave mode products),
+and by polarization only for GRD products.
 Each file is named after the corresponding noise annotation of the input product, with the `denoise-` prefix in place
 of `noise-`.
 
@@ -75,8 +76,9 @@ reconstructed by the processor, while noise azimuth vectors are copied unchanged
 ## Error report
 
 If nominal noise annotations are present in the input SAFE product, the processor parses them together with the
-generated denoise files (interpolating them in the GRD case) and logs the Mean Absolute Error (MAE) and the maximum
-absolute error in dB, as an estimate of the reconstruction quality.
+generated denoise files, interpolates them on a common grid and logs the Mean Absolute Error (MAE) and the maximum
+absolute error in dB, as an estimate of the reconstruction quality. The grid points depending on noise samples set to
+zero by the IPF (beyond the valid swath edges, where the processor still computes the noise) are excluded.
 
 ## Visual comparison
 

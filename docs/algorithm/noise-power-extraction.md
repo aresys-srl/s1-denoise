@@ -10,11 +10,13 @@ tags:
 
 When a Level 0 Noise (L0N) product is provided, the noise power is extracted from its raw measurements as follows.
 
-1. **Raw packets are decoded** into I/Q samples. Pre-amble, rank echo and noise pulse measurements are compressed with
-   plain Block Adaptive Quantization (BAQ, 3/4/5-bit modes) as described in [[RD5]](../API/bibliography.md#reference-documents),
-   section 9.1, and are decoded into the raw quantizer codes accordingly. This is valid as long as the Threshold Index
-   (THIDX) of each block stays below the ICD reconstruction threshold ([RD5], subsection 9.1.2.2), which always holds
-   for the low-dynamic-range noise measurements used here and is verified at runtime.
+1. **Raw packets are decoded** into I/Q samples. Noise measurements (pre-amble, post-amble and noise pulses within the
+   data-take) are compressed with plain Block Adaptive Quantization (BAQ) in 5-bit mode, as described in
+   [[RD5]](../API/bibliography.md#reference-documents), section 9.1. The sample values are reconstructed as in [RD5],
+   subsection 9.1.2.2: with the simple reconstruction (the quantizer code, or the simple reconstruction level for the
+   saturated code) for the blocks whose Threshold Index (THIDX) does not exceed the reconstruction threshold, and with
+   the normal reconstruction (normalized reconstruction level times the sigma factor of the THIDX) above it. Rank
+   echoes are decoded as echo packets with the `sentinel1decoder` library.
 2. **I/Q bias correction is applied** as discussed in [RD5], section 9.2.1. Since for Sentinel-1 data the
    demodulation is performed by the instrument's receive module in the digital domain, the I/Q gain imbalance and I/Q
    non-orthogonality corrections are not necessary. The correction is therefore equivalent to enforcing zero mean on
@@ -24,6 +26,9 @@ When a Level 0 Noise (L0N) product is provided, the noise power is extracted fro
     - rank echo measurements (one mean noise power value for each rank echo sequence);
     - noise pulses, only present for S1C/D (one mean noise power value for each noise sequence);
     - post-amble measurements.
+
+    For Stripmap and Wave mode products only noise pulses are available: pre-amble and post-amble of the data-take for
+    SM, and noise sequences before and after each imagette for WV.
 4. **Some rank echoes are discarded**, as they cannot all be used for noise estimation. Some echoes are affected by
    the stabilization pulses in the pre-amble, as well as by the TxCal/TxHCalIso pulses, as described in [RD5],
    subsection 4.2.1.9. In particular:
@@ -35,6 +40,9 @@ When a Level 0 Noise (L0N) product is provided, the noise power is extracted fro
     - rank echo measurements for EW2 are replaced with those derived from EW3, for all Sentinel-1 units. If EW3 is
       not available, the EW2 measurements are kept; if the two sequences have different lengths, only the overlapping
       measurements are replaced. A warning is issued in both cases.
+5. **For Stripmap and Wave mode products, the measurement times are aligned** to the noise list annotated in the L1
+   product, since the IPF annotates them at the packet time shifted by a constant offset (see
+   [Stripmap and Wave mode](stripmap-wave.md#l0n-products)).
 
 The extracted noise power then goes through the same [outlier rejection](noise-pulse-discard.md) applied to the noise
 power annotated in L1 products.

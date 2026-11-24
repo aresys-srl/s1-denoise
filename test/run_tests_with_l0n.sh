@@ -51,9 +51,6 @@ python3 - "$INPUT" "$OUTPUT" <<'EOF'
 import re
 import sys
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import pandas as pd
 
 log_path, csv_path = sys.argv[1:3]
@@ -112,42 +109,6 @@ df.to_csv(csv_path, index=False, float_format="%.2E")
 # Mean of the per-file MAE for each mission/mode/type, with and without L0N
 summary = df.groupby(["Mission", "Mode", "Type", "with L0N?"])["MAE [dB]"].mean().unstack("with L0N?")
 print(summary.to_string(float_format="%.2e"))
-
-COLORS = {"no": "#2a78d6", "yes": "#eb6834"}
-
-
-def bar_chart(data, title, path):
-    fig, ax = plt.subplots(figsize=(max(6, 1.1 * len(data)), 4.5))
-    x = range(len(data))
-    width = 0.38
-    for i, l0n in enumerate(["no", "yes"]):
-        if l0n in data:
-            ax.bar([k + (i - 0.5) * width for k in x], data[l0n], width * 0.95,
-                   color=COLORS[l0n], label=l0n)
-    ax.set_xticks(list(x))
-    ax.set_xticklabels(["\n".join(k) if isinstance(k, tuple) else k for k in data.index])
-    ax.set_ylabel("Mean absolute error [dB]")
-    ax.set_title(title)
-    ax.yaxis.set_major_formatter(matplotlib.ticker.FormatStrFormatter("%.2e"))
-    ax.grid(axis="y", color="#e1e0d9", linewidth=0.8)
-    ax.set_axisbelow(True)
-    for side in ("top", "right"):
-        ax.spines[side].set_visible(False)
-    ax.legend(title="with L0N?", frameon=False, loc="center left", bbox_to_anchor=(1, 0.5))
-    fig.tight_layout()
-    fig.savefig(path, dpi=150)
-    plt.close(fig)
-    print(f"Saved {path}")
-
-
-for product in ("GRD", "SLC"):
-    if product in summary.index.get_level_values("Type"):
-        data = summary.xs(product, level="Type")
-        bar_chart(data, f"{product} - MAE on denoising", f"mae_{product.lower()}.png")
-
-all_data = summary.copy()
-all_data.index = [f"{product}\n{mode}\n{mission}" for mission, mode, product in summary.index]
-bar_chart(all_data, "GRD vs SLC - MAE on denoising", "mae_all.png")
 EOF
 
-echo "Done. See $OUTPUT and mae_*.png."
+echo "Done. See $OUTPUT; generate the figures with scripts/plot_validation.py."

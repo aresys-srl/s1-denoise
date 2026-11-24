@@ -35,11 +35,11 @@ auxiliary files, as follows:
 | Term | Name | Source |
 |------|------|--------|
 | $P_n(i)$ | Noise power | Noise list annotated in the product annotation XML, or [extracted from the L0N product](noise-power-extraction.md) if provided |
-| $G_{\text{pg}}(i)$ | Internal calibration (PG) gain correction | Replica list annotated in the product annotation XML (only records with both `relativePgProductValidFlag` and `absolutePgProductValidFlag` set to `true`), corrected for $PG_{\text{ref}}$ and interpolated at the burst center |
+| $G_{\text{pg}}(i)$ | Internal calibration (PG) gain correction | Replica list annotated in the product annotation XML (only records with both `relativePgProductValidFlag` and `absolutePgProductValidFlag` set to `true`; the processing stops with an error if no valid record is annotated), corrected for $PG_{\text{ref}}$ and interpolated at the burst center |
 | $G_{\text{ds}}(i)$ | De-scalloping function (azimuth elementary antenna pattern gain) | Noise azimuth vectors, unchanged (TopSAR data only) |
 | $G_{\text{eap}}(i,j)$ | Elevation antenna pattern gain | Antenna pattern list annotated in the product annotation XML, re-interpolated over the denoising vector axis |
 | $G_{\text{rsl}}(j)$ | Range spreading loss correction | Computed from slant range times (see below) |
-| $k_{\text{proc}}$ | Processing gain | AUX_PP1, corrected for the resampling factor for all subswaths after the first one |
+| $k_{\text{proc}}$ | Processing gain | AUX_PP1, divided for TopSAR products by the range oversampling factor $f_s / B_{\text{rg}}$ (not applied to [Stripmap and Wave mode](stripmap-wave.md) products) |
 | $k_{\text{noise}}$ | Noise calibration factor, aligning the denoising vectors to the actual noise level in the data | AUX_CAL |
 | $k_{\text{norm}}$ | Processor normalization factor | [Reconstructed](normalization-factor.md) from the product annotations, AUX_CAL and AUX_INS |
 
@@ -99,7 +99,7 @@ seconds, which could result in missed RFI contamination.
 
 ## Usage scenarios
 
-The processor generates Level 1 noise annotations for S1A, S1B, S1C and S1D TopSAR data-takes, including acquisitions
-prior to June 2018 (before the introduction of rank echoes for S1A and S1B). Used in combination with L0N products, it
+The processor generates Level 1 noise annotations for S1A, S1B, S1C and S1D TopSAR (IW, EW), Stripmap and Wave mode
+data-takes, including acquisitions prior to June 2018 (before the introduction of rank echoes for S1A and S1B). Used in combination with L0N products, it
 enables the regeneration of higher-quality denoising vectors for L1 products generated before 2018, and more generally
 provides a systematic framework for the retro-calibration of existing denoising vectors.

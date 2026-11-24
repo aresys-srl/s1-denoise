@@ -9,8 +9,8 @@ tags:
 # Sentinel-1 Level 1 Noise Processor
 
 The **Sentinel-1 Level 1 Noise (S1 L1N) processor**, distributed as the `s1-denoise` package, reconstructs the thermal
-noise range vectors of Sentinel-1 IW and EW Level 1 products (both SLC and GRD) and writes them to XML files that follow
-the standard Sentinel-1 noise annotation format. The reconstructed vectors can then be compared against the nominal noise
+noise range vectors of Sentinel-1 IW, EW and Stripmap Level 1 products (both SLC and GRD) and of Wave mode products (SLC),
+and writes them to XML files that follow the standard Sentinel-1 noise annotation format. The reconstructed vectors can then be compared against the nominal noise
 annotations embedded in the SAFE product to assess the noise estimation quality.
 
 The processor was developed by Aresys in the framework of the Evolution #25 of the Sentinel-1 SAR Mission Performance
@@ -49,7 +49,8 @@ For each processed channel the processor:
 6. writes the output noise XML files and, if nominal noise annotations are present in the SAFE product, reports the
    Mean Absolute Error (MAE) and maximum absolute error in dB.
 
-Supported inputs are Level 1 SLC and GRD TopSAR (IW, EW) products of all Sentinel-1 units: S1A, S1B, S1C and S1D.
+Supported inputs are Level 1 SLC and GRD TopSAR (IW, EW) and Stripmap (SM, beams S1 to S6) products, and Level 1 SLC
+Wave mode (WV) products, of all Sentinel-1 units: S1A, S1B, S1C and S1D.
 
 ## Getting Started
 

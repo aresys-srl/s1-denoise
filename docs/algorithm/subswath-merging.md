@@ -23,3 +23,11 @@ Once all the noise values have been computed, the merging is carried out through
 
 The outcome is the final cross-subswath denoise annotation, which provides a seamless and consistent noise
 characterization across the entire image.
+
+The merged noise vectors are generated on the same azimuth grid as the IPF noise annotation: one vector every
+$\operatorname{round}(1 / \Delta t)$ lines (about one second), where $\Delta t$ is the azimuth time interval, plus the
+last line of the image and, when not already included, the first and the last line covered by all the subswaths. The
+azimuth time of each vector is the time of its line, rounded to the microsecond.
+
+Stripmap GRD products contain a single swath and no swath merging information: the swath is processed as a single
+subswath covering the whole image.

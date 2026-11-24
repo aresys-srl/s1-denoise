@@ -8,7 +8,7 @@
 #show: aresys-doc.with(
   title: "Sentinel-1 Level 1 Noise Processor",
   subtitle: "Denoising vectors update",
-  date: highlight("06/11/2026"),
+  date: "24/11/2026",
   ref: "ARE-030845",
   mpc-nom: "DI-MPC-E25",
   mpc-ref: "MPC-0680",
@@ -30,10 +30,10 @@
   ),
   change-history: (
     [02/04/2026], [1.0], [First issue of the technical note], [M. Abatangelo, \ B. Mai],
-    [26/05/2026], [1.1], [Release of version 1.0.1: introduced I/Q Bias Correction for L0N noise power extraction, improved sub-swath merging strategy for GRD products], [M. Abatangelo, \ B. Mai],
-    [22/07/2026], [1.2], [Release of version 1.0.2: removed processor's dependency on the statically linked C++ binary and private wheels], [M. Abatangelo, \ B. Mai],
-    [06/11/2026], [1.3], [Release of version 1.1.0: changed algorithm for noise pulse discarding, azimuth FM rate selection per block for GRD products], [M. Abatangelo, \ B. Mai],
-    [#highlight("06/11/2026")], [1.4], [Release of version 1.2.0: added validity check on PG products and added support for SM and WV products], [M. Abatangelo, \ B. Mai],
+    [26/05/2026], [1.1], [*Release of version 1.0.1:* introduced I/Q Bias Correction for L0N noise power extraction, improved sub-swath merging strategy for GRD products], [M. Abatangelo, \ B. Mai],
+    [22/07/2026], [1.2], [*Release of version 1.0.2:* removed processor's dependency on the statically linked C++ binary and private wheels], [M. Abatangelo, \ B. Mai],
+    [06/11/2026], [1.3], [*Release of version 1.1.0:* changed algorithm for noise pulse discarding, azimuth FM rate selection per block for GRD products], [M. Abatangelo, \ B. Mai],
+    [24/11/2026], [1.4], [*Release of version 1.2.0:* added validity check on PG products, added support for SM and WV products], [M. Abatangelo, \ B. Mai],
   ),
   flag_change_history: true,
   flag_list_of_tables: false,
@@ -202,9 +202,9 @@ The information needed are derived, when available, from different sections of t
 
 In particular:
 - $P_("n")(i)$ is the *noise power correction factor*, derived from the noise list annotated in the annotation XML of the SAFE product. Alternatively, it can be extracted from the L0N product, if provided as input (further details in @l0n-extraction).
-- $G_("pg")(i)$ is the *PG correction factor*, derived from replica list annotated in the annotation XML of the SAFE product, corrected for $P G_"ref"$, interpolated at the center of the burst. Only the replica records flagged as valid (both `relativePgProductValidFlag` and `absolutePgProductValidFlag` set to `true`) are used, and each discarded record is reported with a warning;
+- $G_("pg")(i)$ is the *PG correction factor*, derived from replica list annotated in the annotation XML of the SAFE product, corrected for $P G_"ref"$, interpolated at the center of the burst. Only the replica records flagged as valid (both `relativePgProductValidFlag` and `absolutePgProductValidFlag` set to `true`) are used, and each discarded record is reported with a warning. If no valid replica record is annotated for a swath (as for SM GRD slices in the middle of a data-take, which carry no replica record), the PG correction cannot be computed and the processing stops with an error;
 - $k_"noise"$ is the *noise calibration factor*, read from the calibration auxiliary file (AUX_CAL);
-- $k_"proc"$ is the *processing gain*, read from L1 Processor Parameters auxiliary files (AUX_PP1), corrected for the resampling factor for all subswaths after the first one;
+- $k_"proc"$ is the *processing gain*, read from L1 Processor Parameters auxiliary files (AUX_PP1) and, for TopSAR products, divided by the range oversampling factor $f_s \/ B_"rg"$ (range sampling frequency after decimation over range bandwidth); the oversampling factor is not applied to SM and WV products (see @sm-wv);
 - $G_("eap")(i,j)$ is the *elevation antenna pattern gain*, read from antenna pattern list annotated in the annotation XML of the SAFE product, and re-interpolated over the denoising vectors axis;
 - $G_"ds" (i)$ is the *azimuth elementary antenna pattern gain*, annotated in the noise vectors (no modification needed, and only applicable to TopSAR data);
 - $G_("rsl")(j)$ is the *range spreading loss* derived from slant range times, elevated to the power of 4, _i.e._
@@ -223,7 +223,7 @@ Some of these information are annotated straightforward to find within the SAFE 
 
 == Usage
 
-The processor has been developed to generate Level 1 noise annotations for S1A, S1B, S1C, and S1D TopSAR data-takes, including acquisitions prior to June 2018 (before rank echoes introduction for S1A and S1B).
+The processor has been developed to generate Level 1 noise annotations for S1A, S1B, S1C, and S1D data-takes, including acquisitions prior to June 2018 (before rank echoes introduction for S1A and S1B). TopSAR (IW, EW) and Stripmap (SM, beams S1 to S6) SLC and GRD products are supported, as well as Wave mode (WV) SLC products; SM products with full resolution GRD (GRDF) are not supported.
 
 When used in combination with the L0N processor, it enables the regeneration of higher-quality denoising vectors for L1 SAFE products produced before 2018, addressing known limitations in the original processing chain. Furthermore, the processor provides a systematic framework for the retro-calibration of existing denoising vectors, allowing previously generated products to be reprocessed with improved methodologies. This capability enhances the consistency, reliability, and overall radiometric quality of historical datasets, making them more suitable for long-term analyses and cross-sensor comparisons.
 
@@ -238,7 +238,7 @@ The processing pipeline implemented within the processor is summarized in the fl
 #align(center)[
   #show regex("[a-z0-9?]+"): it => text(size: 0.8em, weight: "regular", upper(it.text))
   #diagram(
-    spacing: (5em, 1.8em),   // (orizzontale, verticale)
+    spacing: (5em, 1.6em),   // (orizzontale, verticale)
     node-inset: 5pt,   
 
     node((0, 0), [parsing of *job order*], fill: aresys-light-gray, shape: rect, corner-radius: 5pt),
@@ -305,7 +305,7 @@ The following points provide a more detailed explanation for each step of the pr
   If the input is a GRD product, the `coordinateConversion` section in its annotations is used to extract a 9#super[th]-degree polynomial that converts ground range data into slant range. This allows the SLC algorithms to be reused without introducing additional pipeline differences between SLC and GRD products.
   
 + *Computation of slant range times*\
-  For each burst in each subswath, slant range times are computed for processing purposes, together with range distances and range spread loss.
+  For each burst in each subswath (or each antenna pattern record, for SM and WV products), slant range times are computed for processing purposes, together with range distances and range spread loss.
 
 + *Computation of noise norm factor*\
   The IPF processor computes internally a multiplicative constant for each burst to correct noise estimations. This involves complex computations like IPF processor's shrink factor and Hamming windowing for each look of the acquisition. This is explained more in detail in @nnf.
@@ -325,10 +325,10 @@ The following points provide a more detailed explanation for each step of the pr
   The de-noising process depends on sub-swath dependent parameters: if the input is a GRD product, the processor needs to separate the sub-swaths merged inside the same annotation file, compute thermal noise values on each sub-swath and merge them together to output a single, cross-sub-swath file. A detailed step-by-step breakdown of this procedure is available in @subswath-merging.
   
 + *Generation of output files*\
-  Noise range vectors are  written on an XML file. Noise azimuth vectors are not modified. The denoise files are named after their respective noise files, with the initial prefix "_de_" being the only difference in the filename. The output is stored in the output folder specified by the user in the Job Order, which cannot be the same as the input product(s).
+  Noise range vectors are written on an XML file. Noise azimuth vectors are not modified. For GRD products, the output noise vectors are generated on the same azimuth grid as the IPF annotation (see @subswath-merging). The denoise files are named after their respective noise files, with the initial prefix "_de_" being the only difference in the filename. The output is stored in the output folder specified by the user in the Job Order, which cannot be the same as the input product(s).
 
 + *Computation of mean absolute error*\
-  Thanks to the previous step, the denoise and noise files are parsed (and interpolated in the GRD case) to compute the mean absolute error (MAE) and provide an estimate of the quality of the denoising procedure.
+  Thanks to the previous step, the denoise and noise files are parsed and interpolated on a common grid to compute the mean absolute error (MAE) and the maximum absolute error, and provide an estimate of the quality of the denoising procedure. The grid points depending on noise samples set to zero by the IPF (beyond the valid swath edges, where the processor still computes the noise) are excluded from the comparison.
 
 // #pagebreak(weak: true)
 == Critical points <ccp>
@@ -362,7 +362,9 @@ The looks are extracted on an azimuth FFT grid of $N_"FFT"$ samples, _i.e._ the 
   $
   k_l = [floor((1 - N_"ext") / 2) + (l - 1) dot (N_w - N_"ov")] mod N_"FFT", quad quad N_"ext" = N_w + (L - 1) dot (N_w - N_"ov")
   $
-- $S(k)$ is the azimuth antenna pattern (AAP) read from AUX_CAL, in linear amplitude, interpolated in dB on the FFT grid. The angular step corresponding to one frequency bin is $lambda / (2 v) dot Delta f dot (1 - k_"DC" \/ k_"FM")$, where $v$ is the satellite velocity and $1 - k_"DC" \/ k_"FM"$ is the TopSAR shrink factor. The Doppler centroid rate $k_"DC"$ is derived from the azimuth steering rate of the subswath read from AUX_INS (`radarParams/azimuthSteeringRate`), and the azimuth FM rate $k_"FM"$ from the `azimuthFmRateList` of the product annotation, both evaluated at mid-range. For SLC products the FM rate record of the burst is used; for GRD products, whose FM rate records are not aligned with the blocks of each subswath, the record closest in time to the block is used.
+- $S(k)$ is the azimuth antenna pattern (AAP) read from AUX_CAL, in linear amplitude, interpolated in dB on the FFT grid.
+
+The angular step corresponding to one frequency bin is $lambda / (2 v) dot Delta f dot (1 - k_"DC" \/ k_"FM")$, where $v$ is the satellite velocity and $1 - k_"DC" \/ k_"FM"$ is the TopSAR shrink factor. The Doppler centroid rate $k_"DC"$ is derived from the azimuth steering rate of the subswath read from AUX_INS (`radarParams/azimuthSteeringRate`), and the azimuth FM rate $k_"FM"$ from the `azimuthFmRateList` of the product annotation, both evaluated at mid-range. For SLC products the FM rate record of the burst is used; for GRD products, whose FM rate records are not aligned with the blocks of each subswath, the record closest in time to the block is used.
 
 The expressions of $G_l$ and $W_l$ depend on whether the AAP correction has been applied by the IPF, as reported by the `antennaAzimuthPatternApplied` flag in the product annotation. When the AAP correction is applied, the spectrum is divided by the AAP, which also boosts the noise at the spectrum edges:
 $ 
@@ -398,18 +400,20 @@ Within the same subswath, the value of this normalization factor varies by no mo
 
 The noise power extraction from L0N products is performed as follows.
 
-+ *Raw packets are decoded* into I/Q samples. Preamble, rank echo, and noise pulse measurements are compressed with plain Block Adaptive Quantization (BAQ, 3/4/5-bit modes) as described in @RD5, section 9.1, and are decoded into the raw quantizer codes accordingly -- valid as long as each block's Threshold Index (THIDX) stays below the ICD reconstruction threshold (@RD5, subsection 9.1.2.2), which always holds for the low-dynamic-range noise measurements used here and is verified at runtime.
++ *Raw packets are decoded* into I/Q samples. Noise measurements (preamble, postamble and noise pulses within the data-take) are compressed with plain Block Adaptive Quantization (BAQ) in 5-bit mode, as described in @RD5, section 9.1. The sample values are reconstructed as in @RD5, subsection 9.1.2.2: with the simple reconstruction (the quantizer code, or the simple reconstruction level for the saturated code) for the blocks whose Threshold Index (THIDX) does not exceed the reconstruction threshold, and with the normal reconstruction (normalized reconstruction level times the sigma factor of the THIDX) above it. Rank echoes are decoded as echo packets with the `sentinel1decoder` library.
 + *I/Q Bias Correction is applied* as discussed in @RD5, section 9.2.1. Moreover, since for Sentinel-1 data the instrument's receive module performs the demodulation in the digital domain, the I/Q gain imbalance and I/Q non-orthogonality corrections are not necessary. This means that the aforementioned correction is equivalent to enforce zero mean on both components of the signal.
 + *Mean noise power is computed* by reading and averaging separately each noise sequence from:
   - preamble measurements;
   - rank echoes measurements (extracting one mean noise power value for each rank echo sequence);
   - noise pulses, only present for S1C/D (extracting one mean noise power value for each noise sequence);
   - postamble measurements.
+  For SM and WV products only noise pulses are available: preamble and postamble of the data-take for SM, and noise sequences before and after each imagette for WV.
 + *Some rank echoes are discarded* as they cannot all be used for noise estimation. Specifically, some echoes are affected by the stabilization pulses in the preamble, as well as by the TxCal/TxHCalIso pulses, as described in @RD5, subsection 4.2.1.9. In particular:
   - spikes observed in the rank echo measurements of the first burst of the data-take are removed for S1A/B (in IW1 and EW1 subswaths) as they are biased by previous instrument calibration and stabilization pulses; 
   - the last rank echo in a EW1 sequence for S1A/B is removed since nadir returns might be present; 
   - rank echoes are filtered in an alternating pattern for S1A/B IW products, since odd-numbered measurements are biased by previous instrument calibration pulses;
   - rank echoes measurements for EW2 are replaced with those derived from EW3, for all Sentinel-1 units. If EW3 is not available, the EW2 measurements are kept; if the two sequences have different lengths, only the overlapping measurements are replaced. A warning is issued in both cases.
++ *For SM and WV products, the measurement times are aligned* to the noise list annotated in the L1 product. The IPF annotates SM and WV noise measurements at the packet time shifted by a constant offset (about 0.3--0.4 s, depending on the data-take, the swath and the imagette), which cannot be derived from the L1 annotations. The L0N measurement times are therefore shifted by the difference between the first annotated and the first L0N measurement of the channel.
 
 
 As discussed later in @val_res of the document, when analyzing the results using external L0N products to derive noise power values, instead of using the noise power annotated by the IPF, the S1 L1N processor does not exhibit a reduction in precision, as shown in @cross-type. An example of noise power extraction for a S1A EW product is provided in @l0n-noise-extraction, where the difference between the noise power level extracted from the L1A product and L0N product is lower than 0.05 dB.
@@ -518,6 +522,18 @@ Once all the necessary noise values have been computed across the raster, the me
 
 The outcome of this procedure is the final cross-subswath denoise annotation, which provides a seamless and consistent noise characterization across the entire image.
 
+The merged noise vectors are generated on the same azimuth grid as the IPF noise annotation: one vector every $"round"(1 \/ Delta t)$ lines (about one second), where $Delta t$ is the azimuth time interval, plus the last line of the image and, when not already included, the first and the last line covered by all the subswaths. The azimuth time of each vector is the time of its line, rounded to the microsecond. SM GRD products contain a single swath and no swath merging information: the swath is processed as a single subswath covering the whole image.
+
+=== Stripmap and Wave mode products <sm-wv>
+
+Stripmap (SM, beams S1 to S6) and Wave mode (WV, swaths WV1 and WV2) products are processed with the same noise model as TopSAR products (@eq), with the following differences, all verified against the IPF noise annotations.
+
+- *No bursts.* SM images and WV imagettes are not split into bursts: one noise vector is computed for each record of the antenna pattern list falling inside the image (or imagette), at the azimuth time of the record, _i.e._ about one vector per second. The line of each vector is $"round"((t - t_0) \/ Delta t)$, where $t$ is the time of the record, $t_0$ the time of the first line and $Delta t$ the azimuth time interval, as in the IPF annotation.
+- *Shrink factor.* SM and WV acquisitions do not steer the antenna in azimuth (the AUX_INS azimuth steering rate is zero): the Doppler centroid rate is zero and the shrink factor $1 - k_"DC" \/ k_"FM"$ used for the noise normalization factor (@nnf) is exactly 1.
+- *Processing gain.* The IPF does not divide the processing gain of SM and WV noise vectors by the range oversampling factor $f_s \/ B_"rg"$, as done for TopSAR products. Applying it produces a constant bias equal to $-10 log_10 (f_s \/ B_"rg")$: from $0.46$ to $0.58$ dB for the SM beams, $1.28$ dB for WV1 and $0.54$ dB for WV2. This was verified on SM products of all beams processed with different AUX files, and on WV products of both swaths.
+- *Wave mode imagettes.* Each WV imagette is a separate channel, with its own annotation and noise files, identified by swath, polarization and image number: one denoise file is generated for each imagette. WV products are only available as SLC.
+- *L0N products.* Only noise pulses are available (see @l0n-extraction). The swath of the SM noise packets is derived from the ECC number (_e.g._ `STRIPMAP_5_N_WO_INTERL_CAL` for beam S5), since the swath number field of the packets does not match the beam number; WV noise packets (ECC number `WAVE_MODE`) have swath number 30 for WV1 and 31 for WV2.
+
 
 == Proposal for additional annotations
 
@@ -537,7 +553,7 @@ The S1 L1N processor generates, inside the working directory, new Level 1 denois
 
 To correctly run the S1 L1N processor expects the working directory to be configured as follows:
 + *Job Order:* an XML file providing information about the location of all input and output files/folders. See @job-order for more detailed information about the Job Order file.
-+ *L1A/S folder(s):* target SAFE products for the generation of denoising files. Currently, the processor can correctly handle Level 1 (A/S) SLC and GRD TopSAR acquisition from missions S1A, S1B, S1C, and S1D.
++ *L1A/S folder(s):* target SAFE products for the generation of denoising files. Currently, the processor can correctly handle Level 1 (A/S) SLC and GRD TopSAR (IW, EW) and Stripmap (SM) acquisitions, and SLC Wave mode (WV) acquisitions, from missions S1A, S1B, S1C, and S1D.
 
 + *Auxiliary Data files:* some parameters for the original IPF processing are mission-dependent and written in the relative AUX_PP1, AUX_CAL and AUX_INS folders. Those need to be provided as input from the user. In particular, AUX_INS also provides the expected noise power used to discard noise pulse outliers (@noise-pulse-discard) and the azimuth steering rate of each subswath used for the noise normalization factor (@nnf).
 
@@ -546,7 +562,7 @@ To correctly run the S1 L1N processor expects the working directory to be config
 
 == Outputs
 
-S1 L1N creates an output folder named after the target input L1A/S product, containing the denoise files. The output files are stored in a separate folder (w.r.t. the input SAFE products) without modifying the input L1A/S SAFE products. The generated denoise files are divided by subswath and polarization in case of a SLC input products, or by polarization only for the GRD case. An example is reported below.
+S1 L1N creates an output folder named after the target input L1A/S product, containing the denoise files. The output files are stored in a separate folder (w.r.t. the input SAFE products) without modifying the input L1A/S SAFE products. The generated denoise files are divided by subswath and polarization in case of a SLC input products (and by imagette for WV products), or by polarization only for the GRD case. An example is reported below.
 
 ```
 output/
@@ -700,7 +716,7 @@ An example of a correctly filled Job Order is provided below.
 <Ipf_Job_Order>
   <Ipf_Conf>
 		<Processor_Name>S1_L1N_IPF</Processor_Name>
-		<Version>1.1.0</Version>
+		<Version>1.2.0</Version>
 		<Stdout_Log_Level>INFO</Stdout_Log_Level>
 		<Stderr_Log_Level>INFO</Stderr_Log_Level>
 		<Test>false</Test>
@@ -716,7 +732,7 @@ An example of a correctly filled Job Order is provided below.
 	<List_of_Ipf_Procs count="1">
 		<Ipf_Proc>
 			<Task_Name>S1_L1N_IPF</Task_Name>
-			<Task_Version>1.1.0</Task_Version>
+			<Task_Version>1.2.0</Task_Version>
 			<List_of_Inputs count="7">
 				<Input>
 					<File_Type>IW_SLC__1A</File_Type>
@@ -780,9 +796,9 @@ An example of a correctly filled Job Order is provided below.
 </Ipf_Job_Order>
 ```
 
-Supported file types for input files to process are: `IW_SLC__1A`, `IW_SLC__1S`, `EW_SLC__1A`, `EW_SLC__1S`, `IW_GRDH_1A`, `IW_GRDH_1S`, `IW_GRDM_1A`, `IW_GRDM_1S`, `EW_GRDH_1A`, `EW_GRDH_1S`, `EW_GRDM_1A`, `EW_GRDM_1S`.
+Supported file types for input files to process are: `IW_SLC__1A`, `IW_SLC__1S`, `EW_SLC__1A`, `EW_SLC__1S`, `IW_GRDH_1A`, `IW_GRDH_1S`, `IW_GRDM_1A`, `IW_GRDM_1S`, `EW_GRDH_1A`, `EW_GRDH_1S`, `EW_GRDM_1A`, `EW_GRDM_1S`, `SM_SLC__1A`, `SM_SLC__1S`, `SM_GRDH_1A`, `SM_GRDH_1S`, `SM_GRDM_1A`, `SM_GRDM_1S`, `WV_SLC__1A`, `WV_SLC__1S`. The `SM_` file types are used for all the Stripmap beams (S1 to S6).
 
-Supported file types for *optional* input L0N files for noise power extraction are: `EW_RAW__0N` and `IW_RAW__0N`.
+Supported file types for *optional* input L0N files for noise power extraction are: `EW_RAW__0N`, `IW_RAW__0N`, `SM_RAW__0N` and `WV_RAW__0N`.
 
 `Directory` is the only type of supported output file name type. Supported file type for output is only `DENOISE`.
 
@@ -803,7 +819,7 @@ while the installed version can be checked at any time with #raw("denoise --vers
 
 = Validation results <val_res>
 
-In this section the test results for the first release of the candidate processor are presented. 
+In this section the test results for version 1.2.0 of the processor are presented. 
 
 == One day analysis
 
@@ -815,20 +831,24 @@ Note that during operational acquisitions EW products are significantly less tha
   align: (center, center, center),
   table.header[*Mission ID*][*Day of acquisition*][*Number of products*],
   [S1A], [03/03/2025], [574 (558 IW + 16 EW)],
-  [S1C], [26/02/2026], [439 (432 IW + 7 EW)],
-  [S1D], [17/04/2026], [494 (404 IW + 90 EW)],
+  [S1C], [26/02/2026], [405 (398 IW + 7 EW)],
+  [S1D], [17/04/2026], [541 (442 IW + 99 EW)],
 )
 
-The quality of the denoising process has been determined by computing the mean absolute error (MAE) and the maximum absolute error of the final product on the whole acquisition, expressed in dB. In @batch-results and @batch-results-max the results over the described test dataset are shown. The mean and the maximum absolute errors between annotated and reconstructed noise maps are reported for the different missions and acquisition modes. The average MAE for all analyzed cases is very small, around $0.016$ dB. This indicates a very good capability of noise vectors reconstruction by the processor for SLC products.
+The quality of the denoising process has been determined by computing the mean absolute error (MAE) and the maximum absolute error of the final product on the whole acquisition, expressed in dB. In @batch-results and @batch-results-max the results over the described test dataset are shown. The mean and the maximum absolute errors between annotated and reconstructed noise maps are reported for the different missions and acquisition modes. The median MAE over all the 9152 analyzed denoise files is very small, around $0.0096$ dB (between $0.005$ and $0.011$ dB for each mission and acquisition mode). This indicates a very good capability of noise vectors reconstruction by the processor for SLC products.
+
+The average MAE, around $0.046$ dB, is dominated by 45 S1A IW denoise files (0.5% of the total) with MAE above 1 dB; excluding them, the average MAE is around $0.022$ dB. In these products the noise power annotated by the IPF exceeds the expected noise level read from AUX_INS by more than the upper bound of the discard interval (@noise-pulse-discard), up to $+14$ dB at the start of some data-takes, where it then decreases over the first minutes of acquisition. These noise measurements are discarded by the processor, and the noise power is interpolated from the retained ones, resulting in a reconstructed noise level up to several dB lower than the one annotated by the IPF, which uses them.
 
 #figure(
    image("img/mae_by_mode.png", width: 100%),
-  caption: [*mean* absolute errors between annotated and reconstructed noise maps over all products from the test dataset (box: 25#super[th]-75#super[th] percentile, whiskers: 5#super[th]-95#super[th] percentile). The numbers $n$ at the bottom of the columns indicate the number of denoise files (i.e. subswath + polarization channels) generated and parsed for error calculation.]
+  caption: [*mean* absolute errors between annotated and reconstructed noise maps over all products from the test dataset, per mission and acquisition mode (box: 25#super[th]-75#super[th] percentile, whiskers: 5#super[th]-95#super[th] percentile, line: median, diamond: mean). The numbers $n$ below the acquisition modes indicate the number of denoise files (i.e. subswath + polarization channels) generated and parsed for error calculation.]
 ) <batch-results>
+
+#linebreak()
 
 #figure(
   image("img/max_by_mode.png", width: 100%),
-  caption: [average *maximum* absolute errors between annotated and reconstructed noise maps over all products from the test dataset (box: 25#super[th]-75#super[th] percentile, whiskers: 5#super[th]-95#super[th] percentile). The numbers $n$ at the bottom of the columns indicate the number of denoise files (i.e. subswath + polarization channels) generated and parsed for error calculation.]
+  caption: [*maximum* absolute errors between annotated and reconstructed noise maps over all products from the test dataset, per mission and acquisition mode (box: 25#super[th]-75#super[th] percentile, whiskers: 5#super[th]-95#super[th] percentile, line: median, diamond: mean). The numbers $n$ below the acquisition modes indicate the number of denoise files generated and parsed for error calculation.]
 ) <batch-results-max>
 
 == Cross-type dataset <ctd>
@@ -900,23 +920,23 @@ For each L1A product, every processing was repeated twice: one exploiting the ad
 
 The quality of the denoising process has been determined by computing the mean absolute error of the final product on the whole acquisition, expressed in dB.
 @cross-type reports the MAE over the described cross-type dataset, where it can be noted that the precision in the denoising procedure is not significantly biased by the use of L0N products to extract noise power values.
-The highest average MAE over all analyzed cases is very small, around $1.25 dot 10^(-1)$ dB. This indicates a very good capability of noise vectors reconstruction by the processor even for GRD products.
+The highest average MAE over all analyzed cases is very small, around $3.4 dot 10^(-2)$ dB. This indicates a very good capability of noise vectors reconstruction by the processor even for GRD products. The figures of this section also report, for S1C, the Stripmap and Wave mode products described in @sm-wv-val.
 
 #figure(
-  image("img/overall.png", width: 90%),
-  caption: [mean absolute errors between annotated and reconstructed noise maps on all TDS products, for all operating missions (S1A/C/D), acquisition modes (IW, EW), levels (SLC, GRD), and usage (or not) of L0N products.]
+  image("img/overall.png", width: 100%),
+  caption: [mean absolute errors between annotated and reconstructed noise maps on all TDS products, for all operating missions (S1A/C/D), acquisition modes (IW, EW, and SM, WV for S1C), levels (SLC, GRD), and usage (or not) of L0N products.]
 ) <cross-type>
 
 
-#pagebreak(weak: true)
+// #pagebreak(weak: true)
 === SLC data
 
 Regarding SLC data, the MAE obtained over the test dataset described in @ctd are reported below in @slc-errors.
-The noise maps reconstruction for SLC products is more precise: the mean absolute error is extremely small, around $1.09 dot 10^(-2)$ dB when L0N noise is not involved, while $1.31 dot 10^(-2)$ dB when re-computing the noise power (from L0N), as shown in the graph in @slc-errors.
+The noise maps reconstruction for SLC products is more precise: the mean absolute error is extremely small, around $1.09 dot 10^(-2)$ dB when L0N noise is not involved, while $1.31 dot 10^(-2)$ dB when re-computing the noise power (from L0N), for the TopSAR products, as shown in the graph in @slc-errors.
 
 
 #figure(
-  image("img/slc-errors.png", width: 85%),
+  image("img/slc-errors.png", width: 90%),
   caption: [mean absolute errors between annotated and reconstructed noise maps on SLC products.]
 ) <slc-errors>
 
@@ -941,12 +961,12 @@ When comparing nominal noise profiles with reconstructed ones at a fixed azimuth
 === GRD data <grd-data>
 
 Regarding GRD data, the MAE obtained over the test dataset described in @ctd are reported below in @grd-errors.
-In the GRD case, the error on the denoising process is slightly higher than in the SLC case: it is $7.4 dot 10^(-2)$ dB in standard mode and $7.5 dot 10^(-2)$ dB in L0N extraction mode (see @grd-errors). This is in any case very small, and it is considered acceptable for the scope of this work.
+In the GRD case, the error on the denoising process is slightly higher than in the SLC case: it is $1.44 dot 10^(-2)$ dB in standard mode and $1.58 dot 10^(-2)$ dB in L0N extraction mode for the TopSAR products (see @grd-errors). This is in any case very small, and it is considered acceptable for the scope of this work.
 
 #linebreak()
 
 #figure(
-  image("img/grd-errors.png", width: 85%),
+  image("img/grd-errors.png", width: 90%),
   caption: [mean absolute errors between annotated and reconstructed noise maps on GRD products.]
 ) <grd-errors>
 
@@ -954,27 +974,27 @@ In the GRD case, the error on the denoising process is slightly higher than in t
 As anticipated, the GRD case is more delicate and requires thorough estimations to match exactly nominal noise values. One major difference from the SLC case is the ability of correctly separate, process and merge subswaths from a single annotation file. In some cases, like the GRDH products, this procedure is easier and the error stays low. An example is shown in @grdh-comparison for an S1C IW GRDH product.
 
 #figure(
-  image("img/grdh-comparison.png", width: 100%),
+  image("img/grdh-comparison.png", width: 85%),
   caption: [difference of annotated and reconstructed noise map, HV polarization.]
 ) <grdh-comparison>
 
 \
 On the other hand, GRDM products have more irregular acquisition borders, therefore they are more prone to numerical imprecision. A couple of examples over a Sentinel-1 A and C EW GRDM products are reported respectively in @grdm-comparison and @grdm-comparison-2, where high-error areas are visible in the rightmost part of the graph (@grdm-comparison) or at its bottom (@grdm-comparison-2).
 
-At the far-range edge of outermost subswaths, the nominal annotations set the last 1-3 noise LUT samples to zero, as visible in @grdh-profiles and @grdm-profiles. This is an empirically observed behavior of the IPF output, consistent with the noise estimator lacking valid samples at the extreme antenna beam edge. Our model computes a physically meaningful value there by design, so small residual differences at boundary pixels are expected and do not indicate a processing error.
+At the far-range edge of outermost subswaths, the nominal annotations set the last 1-3 noise LUT samples to zero, as visible in @grdh-profiles and @grdm-profiles. This is an empirically observed behavior of the IPF output, consistent with the noise estimator lacking valid samples at the extreme antenna beam edge. Our model computes a physically meaningful value there by design, so that the processor stays self-consistent over the whole image: these differences are expected, do not indicate a processing error, and the grid points depending on the zero samples of the nominal annotation are excluded from the computation of the errors.
 
 #figure(
-  image("img/grdm-comparison.png", width: 100%),
+  image("img/grdm-comparison.png", width: 85%),
   caption: [difference of annotated and reconstructed noise map, HV polarization.]
 ) <grdm-comparison>
 
 \
 At the start of the acquisition, narrow horizontal high-error bands may appear across all subswaths, because each subswath's first valid burst begins slightly after the product `startTime`, requiring backward extrapolation of the noise profile. IPF's empirical estimator, working directly on the measured data, may yield different values in those initial seconds. The artifact is confined to the opening seconds of the scene and does not affect overall noise model quality.
 
-As a consequence, any interpolation-based comparison will produce an arbitrarily large dB difference in that region regardless of model accuracy. The maximum absolute error is therefore always dominated by this artifact and is not a meaningful quality indicator; the mean absolute error is the appropriate figure of merit.
+As a consequence, the maximum absolute error is dominated by a small number of grid points, at the start of the acquisition and at the subswath boundaries, and is not a meaningful quality indicator; the mean absolute error is the appropriate figure of merit.
 
 #figure(
-  image("img/grdm-comparison-2.png", width: 100%),
+  image("img/grdm-comparison-2.png", width: 85%),
   caption: [difference of annotated and reconstructed noise map, VH polarization.]
 ) <grdm-comparison-2>
 
@@ -988,3 +1008,34 @@ As a consequence, any interpolation-based comparison will produce an arbitrarily
   image("img/grdm-profile.png", width: 90%),
   caption: [comparison between annotated and reconstructed noise profiles, HV polarization.]
 ) <grdm-profiles>
+
+#pagebreak(weak: true)
+== Stripmap and Wave mode dataset <sm-wv-val>
+
+The support for Stripmap and Wave mode products was validated on S1C and S1D products, processed both with the noise power annotated in the L1 products and with the noise power extracted from the corresponding L0N products.
+
+For Stripmap, three SLC products were selected for each beam (S1 to S6) and mission, together with the S1D GRD products of beams S3 and S6. The MAE averaged over the denoise files of each group is reported in the following table.
+
+#aresys-table(
+  columns: (20%, 20%, 30%, 30%),
+  align: (center, center, center, center),
+  table.header[*Mission*][*Beams*][*MAE, annotated noise [dB]*][*MAE, L0N noise [dB]*],
+  [S1C], [S1 to S6, SLC], [$0.002$ -- $0.005$], [$0.003$ -- $0.006$],
+  [S1D], [S2, S3, S4, S6, SLC], [$0.002$ -- $0.004$], [$0.003$ -- $0.005$],
+  [S1D], [S3, S6, GRD], [$0.017$ -- $0.036$], [$0.016$ -- $0.034$],
+)
+
+For Wave mode, 24 SLC products (for a total of 1286 imagettes of both swaths) were selected over several months, covering two sets of auxiliary files for each mission.
+
+#aresys-table(
+  columns: (14%, 30%, 28%, 28%),
+  align: (center, center, center, center),
+  table.header[*Mission*][*AUX_CAL / AUX_INS*][*MAE, annotated noise [dB]*][*MAE, L0N noise [dB]*],
+  [S1C], [V20250325 / V20250224], [$0.002$], [$0.010$],
+  [S1C], [V20250427 / V20250224], [$0.002$], [$0.010$],
+  [S1D], [V20260319 / V20260319], [$0.002$], [$0.004$],
+)
+
+The noise power extracted from WV L0N products is systematically higher than the annotated one by about $0.01$ dB, constant over each data-take, which explains the slightly higher MAE when L0N products are used.
+
+Higher errors, from $0.2$ to $3$ dB, are found on S1D products acquired during the commissioning phase (Stripmap beams S1 and S5, Wave mode WV2), processed by the IPF with the preliminary AUX_INS V20251110. For these products the expected noise power in AUX_INS differs from the measured one by more than the upper bound of the discard interval of @noise-pulse-discard (up to $+2.9$ dB for WV2): the noise measurements, or part of them, are discarded (and the nominal expected noise power is used when all of them are discarded), while the IPF uses them. With the operational AUX_INS the errors are in line with the other products.

@@ -61,8 +61,8 @@ flowchart TD
    between the SLC and GRD pipelines.
 
 6. **Computation of slant range times**
-   For each burst of each subswath, slant range times are computed together with range distances and range spreading
-   loss.
+   For each burst of each subswath (or each antenna pattern record, for [Stripmap and Wave mode](stripmap-wave.md)
+   products), slant range times are computed together with range distances and range spreading loss.
 
 7. **Computation of noise normalization factor**
    The IPF computes internally a multiplicative constant for each burst, which depends on the windowing and
@@ -89,9 +89,12 @@ flowchart TD
    single cross-subswath file. See [Subswath merging](subswath-merging.md).
 
 10. **Generation of output files**
-    Noise range vectors are written to an XML file, while noise azimuth vectors are not modified. See
-    [Outputs](../user-guide/outputs.md).
+    Noise range vectors are written to an XML file, while noise azimuth vectors are not modified. For GRD products, the
+    noise vectors are generated on the same azimuth grid as the IPF annotation (see
+    [Subswath merging](subswath-merging.md)). See [Outputs](../user-guide/outputs.md).
 
 11. **Computation of mean absolute error**
-    The nominal noise annotations and the generated denoise files are parsed (and interpolated, in the GRD case) to
-    compute the mean and maximum absolute error, providing an estimate of the reconstruction quality.
+    The nominal noise annotations and the generated denoise files are parsed and interpolated on a common grid to
+    compute the mean and maximum absolute error, providing an estimate of the reconstruction quality. The grid points
+    depending on noise samples set to zero by the IPF (beyond the valid swath edges, where the processor still computes
+    the noise) are excluded from the comparison.

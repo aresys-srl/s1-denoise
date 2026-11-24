@@ -29,7 +29,7 @@ directory. In addition:
 <Ipf_Job_Order>
   <Ipf_Conf>
     <Processor_Name>S1_L1N_IPF</Processor_Name>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <Stdout_Log_Level>INFO</Stdout_Log_Level>
     <Stderr_Log_Level>INFO</Stderr_Log_Level>
     <Test>false</Test>
@@ -45,7 +45,7 @@ directory. In addition:
   <List_of_Ipf_Procs count="1">
     <Ipf_Proc>
       <Task_Name>S1_L1N_IPF</Task_Name>
-      <Task_Version>1.1.0</Task_Version>
+      <Task_Version>1.2.0</Task_Version>
       <List_of_Inputs count="7">
         <Input>
           <File_Type>IW_SLC__1A</File_Type>
@@ -113,10 +113,12 @@ directory. In addition:
 
 | Role                    | Supported `File_Type` values                                                                                                                                                         |
 |-------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| L1 products to process  | `IW_SLC__1A`, `IW_SLC__1S`, `EW_SLC__1A`, `EW_SLC__1S`, `IW_GRDH_1A`, `IW_GRDH_1S`, `IW_GRDM_1A`, `IW_GRDM_1S`, `EW_GRDH_1A`, `EW_GRDH_1S`, `EW_GRDM_1A`, `EW_GRDM_1S`               |
-| L0N products (optional) | `EW_RAW__0N`, `IW_RAW__0N`                                                                                                                                                           |
+| L1 products to process  | `IW_SLC__1A`, `IW_SLC__1S`, `EW_SLC__1A`, `EW_SLC__1S`, `IW_GRDH_1A`, `IW_GRDH_1S`, `IW_GRDM_1A`, `IW_GRDM_1S`, `EW_GRDH_1A`, `EW_GRDH_1S`, `EW_GRDM_1A`, `EW_GRDM_1S`, `SM_SLC__1A`, `SM_SLC__1S`, `SM_GRDH_1A`, `SM_GRDH_1S`, `SM_GRDM_1A`, `SM_GRDM_1S`, `WV_SLC__1A`, `WV_SLC__1S` |
+| L0N products (optional) | `EW_RAW__0N`, `IW_RAW__0N`, `SM_RAW__0N`, `WV_RAW__0N`                                                                                                                               |
 | Auxiliary files         | `AUX_PP1`, `AUX_CAL`, `AUX_INS`                                                                                                                                                      |
 | Output                  | `DENOISE` (the only supported `File_Name_Type` is `Directory`)                                                                                                                       |
+
+The `SM_` file types are used for all the Stripmap beams (S1 to S6).
 
 ## Log level
 

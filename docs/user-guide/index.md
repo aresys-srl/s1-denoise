@@ -18,7 +18,8 @@ The processor expects the following inputs:
 1. **Job Order**: an XML file providing the location of all input and output files and folders. See
    [Job Order](job-order.md) for details.
 2. **L1A/S SAFE product(s)**: the target products for which denoising files are generated. Level 1 (A/S) SLC and GRD
-   TopSAR acquisitions from S1A, S1B, S1C and S1D are supported.
+   TopSAR (IW, EW) and Stripmap (SM) acquisitions, and SLC Wave mode (WV) acquisitions, from S1A, S1B, S1C and S1D are
+   supported.
 3. **Auxiliary data files**: some parameters of the original IPF processing are mission-dependent and stored in the
    AUX_PP1, AUX_CAL and AUX_INS products, which must be provided by the user. AUX_INS also provides the expected noise
    power used to [discard noise pulse outliers](../algorithm/noise-pulse-discard.md) and the azimuth steering rate

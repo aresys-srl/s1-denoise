@@ -8,6 +8,21 @@ tags:
 
 # Changelog
 
+## v1.2.0
+
+**Additional features**
+
+- Support for [Stripmap](../algorithm/stripmap-wave.md) products (beams S1 to S6), SLC and GRD (GRDH, GRDM), with optional L0N products (`SM_SLC__1A/1S`, `SM_GRDH_1A/1S`, `SM_GRDM_1A/1S` and `SM_RAW__0N` Job Order file types).
+- Support for [Wave mode](../algorithm/stripmap-wave.md) SLC products, one denoise file per imagette, with optional L0N products (`WV_SLC__1A/1S` and `WV_RAW__0N` Job Order file types).
+- Only the PG replica records flagged as valid (`relativePgProductValidFlag` and `absolutePgProductValidFlag` set to `true`) are used for the PG correction; each discarded record is reported with a warning.
+- The noise vectors of GRD products are generated on the same azimuth grid as the IPF annotation (one vector about every second, plus the last line of the image and the first and last line covered by all subswaths), with times rounded to the microsecond.
+- The grid points depending on noise samples set to zero by the IPF (beyond the valid swath edges, where the processor still computes the noise) are excluded from the MAE and maximum error.
+
+**Bug fixes**
+
+- BAQ 5-bit noise samples of L0N products are reconstructed as in the ICD (simple and normal reconstruction), instead of aborting when the Threshold Index exceeds the simple reconstruction threshold.
+- Explicit errors when no valid PG replica record is annotated for a swath, and when the L0N product has no noise measurements for a processed channel.
+
 ## v1.1.0
 
 **Breaking changes**

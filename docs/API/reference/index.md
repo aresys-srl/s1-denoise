@@ -19,5 +19,6 @@ Browse the modules listed in this section to explore available classes, function
 
 !!! note
 
-    The processor is meant to be used through the `denoise` command line interface: the Python modules are documented
-    for development purposes and do not constitute a stable public API.
+    The processor is meant to be used through the `denoise` command line interface or through the package-level
+    functions `s1_denoise.run_job_order` and `s1_denoise.reconstruct_noise` (see [Python entry points](cli.md#python-entry-points)).
+    The other Python modules are documented for development purposes and do not constitute a stable public API.

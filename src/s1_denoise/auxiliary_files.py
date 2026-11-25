@@ -12,9 +12,9 @@ references, exposing them through dedicated getter methods for use in the denois
 from lxml import etree 
 from pathlib import Path
 import numpy as np
-import sys
 
 from s1_denoise.logger import denoise_logger
+from s1_denoise.exceptions import InvalidInputError
 
 class AuxiliaryFiles:
     """
@@ -54,8 +54,8 @@ class AuxiliaryFiles:
 
     Raises
     ------
-    SystemExit
-        If any of the auxiliary files contains no usable entries (exit code 128).
+    InvalidInputError
+        If any of the auxiliary files contains no usable entries.
     """
     
     def __init__(self, mission_id, pp1_path: Path, cal_path: Path, ins_path: Path):
@@ -87,8 +87,8 @@ class AuxiliaryFiles:
 
         Raises
         ------
-        SystemExit
-            If no calibration parameters are found (exit code 128).
+        InvalidInputError
+            If no calibration parameters are found.
         """
         
         tree = etree.parse(self.cal_filepath.resolve())
@@ -110,8 +110,7 @@ class AuxiliaryFiles:
 
         # if no matching swath/polarisation is found
         if not self.calibration_parameters:
-            denoise_logger.error(f"Error reading calibration file. Aborting...")
-            sys.exit(128)
+            raise InvalidInputError(f"No calibration parameters found in AUX_CAL file {self.cal_filepath}")
     
     def read_from_aux_pp1(self):
         """
@@ -122,8 +121,8 @@ class AuxiliaryFiles:
 
         Raises
         ------
-        SystemExit
-            If no processing parameters are found (exit code 128).
+        InvalidInputError
+            If no processing parameters are found.
         """
         
         tree = etree.parse(self.pp1_filepath.resolve())
@@ -174,8 +173,7 @@ class AuxiliaryFiles:
 
         # if no matching swath/polarisation is found
         if not self.processing_parameters:
-            denoise_logger.error(f"Error reading PP1 file. Aborting...")
-            sys.exit(128)
+            raise InvalidInputError(f"No processing parameters found in AUX_PP1 file {self.pp1_filepath}")
 
     def read_from_aux_ins(self):
         """
@@ -186,8 +184,8 @@ class AuxiliaryFiles:
 
         Raises
         ------
-        SystemExit
-            If no internal calibration parameters are found (exit code 128).
+        InvalidInputError
+            If no internal calibration parameters are found.
         """
         
         tree = etree.parse(self.ins_filepath.resolve())
@@ -218,8 +216,7 @@ class AuxiliaryFiles:
 
         # if no matching swath/polarisation is found
         if not self.pg_references:
-            denoise_logger.error(f"Error reading INS file. Aborting...")
-            sys.exit(128)
+            raise InvalidInputError(f"No internal calibration parameters found in AUX_INS file {self.ins_filepath}")
     
     def get_gain_from_pp1(self, product_id, subswath, pol):
         """

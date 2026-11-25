@@ -13,15 +13,10 @@ import click
 from pathlib import Path
 import sys
 
-from perseo_core.timing import PreciseDateTime
-
-from s1_denoise.logger import denoise_logger
-from s1_denoise.noise_profiles import generate_noise_profiles, print_exec_time
 from s1_denoise import __version__
-from s1_denoise.jo_parser import JobOrder, find_l0n
-from s1_denoise.auxiliary_files import AuxiliaryFiles
-from s1_denoise.output import write_to_xml
-from s1_denoise.error_calculation import calculate_error
+from s1_denoise.api import run_job_order
+from s1_denoise.exceptions import DenoiseError
+from s1_denoise.logger import denoise_logger
 
 
 @click.command()
@@ -33,9 +28,7 @@ def denoise_cli(job_order_path):
     """
     Generate noise profiles starting from L1 SAFE files.
     \f
-    For each L1 product listed in the Job Order, the associated L0N product is looked up, noise vectors are
-    reconstructed and written as XML files in the output directory. If the product contains the corresponding
-    nominal noise annotation, the mean and maximum absolute errors (dB) are logged.
+    Runs `s1_denoise.api.run_job_order` on the Job Order, mapping any error to exit code 128.
 
     Parameters
     ----------
@@ -45,70 +38,18 @@ def denoise_cli(job_order_path):
     Raises
     ------
     SystemExit
-        With code 128 on any unexpected error; ``SystemExit`` raised during processing (e.g. by Job Order
-        validation) is propagated. The exit code is always logged before leaving.
+        With code 128 on any error. Errors detected by the processor (`DenoiseError`) are logged with their message
+        only, unexpected errors with their traceback. The exit code is always logged before leaving.
     """
 
     return_code = 0
     try:
-        jo = JobOrder(job_order_path)
+        run_job_order(job_order_path)
 
-        # set log level
-        denoise_logger.setLevel(jo.log_level)
-        denoise_logger.debug("Starting noise processor...")
-
-        # read auxiliary files
-        aux_files = AuxiliaryFiles(mission_id = jo.mission_id,
-                                   pp1_path = jo.aux_pp1_filepath,
-                                   cal_path = jo.aux_cal_filepath,
-                                   ins_path = jo.aux_ins_filepath)
-
-        # read file to process from Job Order
-        product_path_list = [
-            Path(file_name)
-            for file_names in jo.input_files_to_process
-            for file_name in file_names['List_of_File_Names']['File_Name']
-        ]
-
-        out_filepath_list = []
-
-        start_time = PreciseDateTime.now()
-
-        for current_prod in product_path_list:
-
-            # respective L0N product
-            associated_l0n = find_l0n(l1a=current_prod, l0n_list=jo.input_l0n_files)
-
-            # denoise product
-            noise_vectors_list = generate_noise_profiles(prod=current_prod, l0n_file=associated_l0n, aux_files=aux_files)
-
-            # generate output files
-            for elem in noise_vectors_list:
-
-                out_filepath = write_to_xml(noise=elem, output_path=jo.output_path, safe_path=current_prod)
-                out_filepath_list.append(out_filepath)
-
-                # if nominal noise files exist, calculate MAE
-                nominal_noise = current_prod / "annotation/calibration" / (out_filepath.stem[2:] + ".xml")
-                if nominal_noise.exists():
-
-                    mae_on_denoise, max_err_on_denoise = calculate_error(nominal_noise_filepath=nominal_noise,
-                                                       denoise_filepath=out_filepath)
-
-                    if abs(mae_on_denoise) < 1.0:
-                        denoise_logger.info(f"Mean absolute error on denoising: {mae_on_denoise:.2e} dB")
-                    else:
-                        denoise_logger.warning(f"High mean absolute error on denoising: {mae_on_denoise:.2e} dB")
-
-                    denoise_logger.info(f"Maximum absolute error on denoising: {max_err_on_denoise:.2e} dB")
-
-        denoise_logger.info("Denoising process terminated successfully")
-
-        print_exec_time(elapsed_seconds=PreciseDateTime.now() - start_time)
-
-    except SystemExit as e:
-        return_code = e.code
-        raise
+    except DenoiseError as e:
+        denoise_logger.error(f"{e}. Aborting...")
+        return_code = 128
+        sys.exit(128)
     except Exception:
         # any unhandled error stops the processor with exit code 128
         denoise_logger.exception("Unexpected error. Aborting...")

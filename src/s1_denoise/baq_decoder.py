@@ -12,10 +12,9 @@ the simple reconstruction (the code itself, or the simple reconstruction level f
 threshold, with the normal reconstruction (normalized reconstruction level times sigma factor) above it.
 """
 
-import sys
 import numpy as np
 
-from s1_denoise.logger import denoise_logger
+from s1_denoise.exceptions import UnsupportedProductError
 
 QE_BLOCK_LEN = 128
 QE_HEADER_BITS = 8
@@ -201,15 +200,14 @@ def decode_baq_packet(raw_user_data: bytes, num_quads: int, code_bits: int = 5):
 
     Raises
     ------
-    SystemExit
-        If `code_bits` is not 5 (exit code 128).
+    UnsupportedProductError
+        If `code_bits` is not 5.
     """
 
     if code_bits != 5:
-        denoise_logger.error(
-            f"BAQ {code_bits}-bit decoding is not validated against real data yet (only 5-bit noise packets have been verified); refusing to decode silently to avoid producing unverified noise power values."
+        raise UnsupportedProductError(
+            f"BAQ {code_bits}-bit decoding is not validated against real data yet (only 5-bit noise packets have been verified); refusing to decode silently to avoid producing unverified noise power values"
         )
-        sys.exit(128)
 
     bits = np.unpackbits(np.frombuffer(raw_user_data, dtype=np.uint8)).astype(np.int64)
 

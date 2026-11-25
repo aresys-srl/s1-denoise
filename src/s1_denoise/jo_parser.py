@@ -10,11 +10,11 @@ Also includes utilities to match L1 products with their corresponding L0N files.
 """
  
 import xmltodict
-import sys
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
 from s1_denoise.logger import denoise_logger
+from s1_denoise.exceptions import JobOrderError, InputNotFoundError
 
 FIELDS                  = ["Processor_Name", "Version", "Stdout_Log_Level", "Stderr_Log_Level", "Test", "Breakpoint_Enable"]
 INPUT_L0N_FILES         = ["IW_RAW__0N", "EW_RAW__0N", "SM_RAW__0N", "WV_RAW__0N"]
@@ -74,8 +74,7 @@ class JobOrder:
 
     On construction the Job Order is parsed and validated: the AUX_PP1, AUX_CAL and AUX_INS inputs must be present,
     the output path must not lie inside any input path, the L0N and auxiliary inputs must exist on disk and each
-    L1 input product must contain a ``manifest.safe``. Any failure is logged and terminates the process with exit
-    code 128.
+    L1 input product must contain a ``manifest.safe``. Any failure raises a `DenoiseError` subclass.
 
     Parameters
     ----------
@@ -106,17 +105,18 @@ class JobOrder:
 
     Raises
     ------
-    RuntimeError
-        If ``joborder_path`` does not have an ``.xml`` suffix.
-    SystemExit
-        With code 128 if any of the validation checks fails.
+    JobOrderError
+        If ``joborder_path`` does not have an ``.xml`` suffix, an auxiliary file is missing from the Job Order or the
+        output path lies inside an input path.
+    InputNotFoundError
+        If an input product, auxiliary file or ``manifest.safe`` does not exist on disk.
     """
 
     def __init__(self, joborder_path: Path):
         """Parse the Job Order file and validate its content."""
 
         if joborder_path.suffix != ".xml":
-            raise RuntimeError(f"Job order {joborder_path} file is not an .xml file")
+            raise JobOrderError(f"Job order {joborder_path} file is not an .xml file")
         else:
             data = xml_to_dict(joborder_path)
 
@@ -137,24 +137,21 @@ class JobOrder:
             self.aux_pp1_filepath = Path(pp1_list[0]['List_of_File_Names']['File_Name'][0])
             denoise_logger.info(f"AUX_PP1: {self.aux_pp1_filepath}")
         else:
-            denoise_logger.error("Missing AUX_PP1 file in Job Order. Aborting...")
-            sys.exit(128)
+            raise JobOrderError("Missing AUX_PP1 file in Job Order")
 
         cal_list = [elem for elem in self.input_files if elem['File_Type'] == "AUX_CAL"]
         if len(cal_list) != 0:
             self.aux_cal_filepath = Path(cal_list[0]['List_of_File_Names']['File_Name'][0])
             denoise_logger.info(f"AUX_CAL: {self.aux_cal_filepath}")
         else:
-            denoise_logger.error("Missing AUX_CAL file in Job Order. Aborting...")
-            sys.exit(128)
+            raise JobOrderError("Missing AUX_CAL file in Job Order")
 
         ins_list = [elem for elem in self.input_files if elem['File_Type'] == "AUX_INS"]
         if len(ins_list) != 0:
             self.aux_ins_filepath = Path(ins_list[0]['List_of_File_Names']['File_Name'][0])
             denoise_logger.info(f"AUX_INS: {self.aux_ins_filepath}")
         else:
-            denoise_logger.error("Missing AUX_INS file in Job Order. Aborting...")
-            sys.exit(128)
+            raise JobOrderError("Missing AUX_INS file in Job Order")
 
         # output filepath
         self.output_path = Path(ipf_proc['List_of_Outputs']['Output'][0]['File_Name'][0])
@@ -164,8 +161,7 @@ class JobOrder:
             self.output_path == input_dir or self.output_path.is_relative_to(input_dir)
             for input_dir in input_dirs
         ):
-            denoise_logger.error("Cannot write results in input folders. Aborting...")
-            sys.exit(128)
+            raise JobOrderError("Cannot write results in input folders")
 
         self.check_input_files_exist()
         self.check_manifest_file()
@@ -174,12 +170,10 @@ class JobOrder:
         """
         Check that the L0N input products and the auxiliary files exist on disk.
 
-        Every missing file is logged before exiting.
-
         Raises
         ------
-        SystemExit
-            With code 128 if at least one file is missing.
+        InputNotFoundError
+            If at least one file is missing; the message lists all the missing files.
         """
         missing = []
 
@@ -192,9 +186,7 @@ class JobOrder:
                 missing.append(f)
 
         if missing:
-            for f in missing:
-                denoise_logger.error(f"Input file not found: {f}")
-            sys.exit(128)
+            raise InputNotFoundError("Input file(s) not found: " + ", ".join(str(f) for f in missing))
 
     def check_manifest_file(self):
         """
@@ -206,8 +198,8 @@ class JobOrder:
 
         Raises
         ------
-        SystemExit
-            With code 128 if a product directory or its manifest file does not exist.
+        InputNotFoundError
+            If a product directory or its manifest file does not exist.
         """
     
         for prod in self.input_files_to_process:
@@ -215,11 +207,9 @@ class JobOrder:
             manifest_path = prod_name / "manifest.safe"
 
             if not prod_name.exists():
-                denoise_logger.error(f"Input product not found: {prod_name}. Aborting...")
-                sys.exit(128)
+                raise InputNotFoundError(f"Input product not found: {prod_name}")
             if not manifest_path.exists():
-                denoise_logger.error(f"Manifest file not found: {manifest_path}. Aborting...")
-                sys.exit(128)
+                raise InputNotFoundError(f"Manifest file not found: {manifest_path}")
 
             tree = ET.parse(manifest_path)
             root = tree.getroot()

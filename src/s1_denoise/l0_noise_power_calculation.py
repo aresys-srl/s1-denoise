@@ -14,7 +14,6 @@ noise sequences before and after each imagette: they are used as they are.
 """
 
 import re
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -25,6 +24,7 @@ from perseo_core.timing import PreciseDateTime
 
 from s1_denoise.baq_decoder import decode_baq_packet, quads_to_complex
 from s1_denoise.logger import denoise_logger
+from s1_denoise.exceptions import UnsupportedProductError
 
 # Seconds between the GPS time epoch (1980-01-06T00:00:00) used by the "Coarse Time"/"Fine Time" packet fields and PreciseDateTime's own epoch (1985-01-01T00:00:00 UTC).
 _GPS_EPOCH_TO_PRECISEDATETIME_EPOCH_SEC = 157420800.0
@@ -322,15 +322,12 @@ def calculate_noise_power(l0n_path: Path, mission_id: str, rank_echoes_present: 
 
     Raises
     ------
-    SystemExit
-        For S1C/S1D products with rank echoes, not supported yet (exit code 128).
+    UnsupportedProductError
+        For S1C/S1D products with rank echoes, not supported yet.
     """
 
     if mission_id.upper() in ["S1C", "S1D"] and rank_echoes_present:
-        denoise_logger.error(
-            "S1C/S1D rank-echo handling not implemented yet. Aborting..."
-        )
-        sys.exit(128)
+        raise UnsupportedProductError("S1C/S1D rank-echo handling not implemented yet")
 
     channels = {}
     for dat_path in sorted(Path(l0n_path).glob("*.dat")):

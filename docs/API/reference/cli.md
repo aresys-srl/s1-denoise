@@ -7,6 +7,14 @@ tags:
     - python
 ---
 
+## Python entry points
+
+::: s1_denoise.api
+
+## Exceptions
+
+::: s1_denoise.exceptions
+
 ## Command Line Interface
 
 ::: s1_denoise.cli

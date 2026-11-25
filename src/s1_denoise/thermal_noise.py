@@ -14,13 +14,13 @@ for the TopSAR (IW, EW) and stripmap modes, and SLC processing for the wave mode
 
 import numpy as np
 import math
-import sys
 from numpy.typing import NDArray
 from scipy.constants import speed_of_light
 
 from s1_denoise import R_REF
 from s1_denoise.utils import db_to_linear, remove_outliers
 from s1_denoise.logger import denoise_logger
+from s1_denoise.exceptions import InvalidInputError
 from s1_denoise.auxiliary_files import AuxiliaryFiles
 from s1_denoise.xml_reader import (
     read_pg_correction_list,
@@ -160,10 +160,7 @@ class ThermalNoise:
         if isinstance(params, dict):
             params = [params]
         elif not isinstance(params, list):
-            denoise_logger.error(
-                f"Unexpected swath processing parameters type: {type(params)}"
-            )
-            sys.exit(128)
+            raise InvalidInputError(f"Unexpected swath processing parameters type: {type(params)}")
 
         self.swath_params = [item for item in params if item.get("swath") == self.swath_id]
 

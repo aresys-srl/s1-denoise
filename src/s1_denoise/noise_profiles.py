@@ -11,7 +11,6 @@ noise vectors. Optionally incorporates noise power correction derived from the
 associated L0N file.
 """
 
-import sys
 from pathlib import Path
 import numpy as np
 
@@ -19,6 +18,7 @@ from perseo_core.timing import PreciseDateTime
 
 # Local imports
 from s1_denoise.logger import denoise_logger
+from s1_denoise.exceptions import UnsupportedProductError
 from s1_denoise.s1safe import S1Safe
 from s1_denoise.xml_reader import create_slant_range_times, read_metadata_from_safe_annotation, add_single_swath_merge
 from s1_denoise.thermal_noise import ThermalNoise
@@ -300,9 +300,10 @@ def generate_noise_profiles(prod: Path, aux_files: AuxiliaryFiles, l0n_file: Pat
     list of OutputNoiseVectors_SLC or list of OutputNoiseVectors_GRD
         Output noise vectors, one element per output noise file.
 
-    Notes
-    -----
-    The process exits with code 128 if the product type is neither SLC nor GRD.
+    Raises
+    ------
+    UnsupportedProductError
+        If the product type is neither SLC nor GRD.
     """
 
     safe = S1Safe(prod)
@@ -320,7 +321,6 @@ def generate_noise_profiles(prod: Path, aux_files: AuxiliaryFiles, l0n_file: Pat
     elif safe.product_type.startswith("GRD"):
         simulated_noises = grd_processing(safe, aux_files, dn_value, noise_power_correction)
     else:
-        denoise_logger.error(f"Unknown product type: {safe.product_type}")
-        sys.exit(128)
+        raise UnsupportedProductError(f"Unknown product type: {safe.product_type}")
     
     return simulated_noises

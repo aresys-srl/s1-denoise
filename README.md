@@ -83,31 +83,44 @@ A Job Order template is provided in [`templates/JobOrder.xml`](templates/JobOrde
 
 ### Python API
 
-The processing steps can also be called directly from Python, without a Job Order. A minimal example that reconstructs the noise vectors of one product and writes them to XML:
+The processor can also be used as a Python package, through two functions exposed at package level.
+
+`run_job_order` processes a Job Order exactly as the `denoise` command does: it writes the output noise XML files to the output directory of the Job Order and returns their paths.
 
 ```python
-from pathlib import Path
+import s1_denoise
 
-from s1_denoise.auxiliary_files import AuxiliaryFiles
-from s1_denoise.noise_profiles import generate_noise_profiles
-from s1_denoise.output import write_to_xml
-
-aux_files = AuxiliaryFiles(
-    mission_id="S1A",
-    pp1_path=Path("/path/to/S1A_AUX_PP1_....SAFE"),
-    cal_path=Path("/path/to/S1A_AUX_CAL_....SAFE"),
-    ins_path=Path("/path/to/S1A_AUX_INS_....SAFE"),
-)
-
-product = Path("/path/to/S1A_IW_SLC__1SDV_....SAFE")
-noise_vectors = generate_noise_profiles(prod=product, aux_files=aux_files)  # optionally: l0n_file=Path(...)
-
-for channel in noise_vectors:
-    out_file = write_to_xml(noise=channel, output_path=Path("/path/to/output"), safe_path=product)
-    print(out_file)
+output_files = s1_denoise.run_job_order("/path/to/job/order.xml")
 ```
 
-`generate_noise_profiles` returns one element per output noise file (channel). See the [API reference](https://opensource.aresys.it/s1-denoise/API/reference/) for the full list of modules and functions.
+`reconstruct_noise` processes a single L1 product from explicit paths, without a Job Order, and returns the reconstructed noise vectors in memory without writing any file:
+
+```python
+import s1_denoise
+
+channels = s1_denoise.reconstruct_noise(
+    "/path/to/S1A_IW_GRDH_1SDV_....SAFE",
+    aux_pp1="/path/to/S1A_AUX_PP1_....SAFE",
+    aux_cal="/path/to/S1A_AUX_CAL_....SAFE",
+    aux_ins="/path/to/S1A_AUX_INS_....SAFE",
+    l0n="/path/to/S1A_IW_RAW__0NDV_....SAFE",  # optional
+)
+
+for channel in channels:  # one per polarisation (and per swath for SLC products)
+    print(channel.ads_header["polarisation"], channel.ads_header["swath"])
+    for vector in channel.noise_range_vectors:
+        vector.azimuthTime, vector.line, vector.pixels, vector.noise_values  # noise in linear scale
+```
+
+Unlike the `denoise` command, both functions raise Python exceptions instead of exiting with code 128. Errors detected by the processor derive from `s1_denoise.DenoiseError`: `JobOrderError` (invalid Job Order), `InputNotFoundError` (missing input, also a `FileNotFoundError`), `InvalidInputError` (unusable auxiliary file or annotation) and `UnsupportedProductError` (product or feature not supported).
+
+```python
+try:
+    s1_denoise.run_job_order("/path/to/job/order.xml")
+except s1_denoise.DenoiseError as e:
+    print(f"Processing failed: {e}")
+```
+ The log level is set by the Job Order in `run_job_order`; with `reconstruct_noise` it can be set through the standard `logging` module on the `"denoise"` logger. See the [API reference](https://opensource.aresys.it/s1-denoise/API/reference/) for details.
 
 ## Visualisation
 

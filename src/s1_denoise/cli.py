@@ -16,7 +16,7 @@ import sys
 from s1_denoise import __version__
 from s1_denoise.api import run_job_order
 from s1_denoise.exceptions import DenoiseError
-from s1_denoise.logger import denoise_logger
+from s1_denoise.logger import denoise_logger, setup_logger
 
 
 @click.command()
@@ -41,6 +41,8 @@ def denoise_cli(job_order_path):
         With code 128 on any error. Errors detected by the processor (`DenoiseError`) are logged with their message
         only, unexpected errors with their traceback. The exit code is always logged before leaving.
     """
+
+    setup_logger()
 
     return_code = 0
     try:

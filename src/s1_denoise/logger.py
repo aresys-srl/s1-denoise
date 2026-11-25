@@ -4,9 +4,12 @@
 """
 Logging configuration module for the denoising processor.
 
-Sets up a named logger with colorized console output and plain-text file output, using a structured log format
-that includes timestamp, hostname, processor name, version, and process ID. Exposes a module-level
-``denoise_logger`` instance for use across the package.
+Exposes the module-level ``denoise_logger`` (the ``denoise`` logger) used across the package. When the package is
+imported as a library the logger only has a ``logging.NullHandler``: no file is created, nothing is printed and the
+records propagate to the logging configuration of the host application.
+
+The ``denoise`` command calls `setup_logger`, which adds colorized console output and plain-text file output, using
+a structured log format that includes timestamp, hostname, processor name, version, and process ID.
 """
 
 import logging
@@ -19,8 +22,10 @@ def setup_logger():
     """
     Set up the ``denoise`` logger with colorized console output and file output.
 
-    Handlers are attached only if the ``denoise`` logger itself has none yet (handlers of ancestor loggers are not
-    considered), so repeated calls do not duplicate output. Propagation to ancestor loggers is disabled, so that
+    Called by the ``denoise`` command at startup; it is not called on import, so that using the package as a library
+    has no side effects on the logging configuration and the file system. Handlers are attached only if the
+    ``denoise`` logger has no handlers yet other than the ``NullHandler`` added on import, so repeated calls do not
+    duplicate output. Propagation to ancestor loggers is disabled, so that
     records are not printed twice when the root logger is configured by the host application. Log levels
     are renamed to short tags (``[D]``, ``[I]``, ``[W]``, ``[E]``, ``[P]``), records are written both to the console
     (colorized) and to ``denoise.log`` in the current working directory, and the level is set to ``INFO``.
@@ -34,9 +39,9 @@ def setup_logger():
     # Check if the logger has already handlers attached
     logger = logging.getLogger("denoise")
 
-    # Only set up logging if no handlers are already attached to this logger
+    # Only set up logging if no handlers other than the NullHandler added on import are attached to this logger
     # (hasHandlers() would also look at ancestor loggers, e.g. a root logger configured by the host application)
-    if not logger.handlers:
+    if all(isinstance(handler, logging.NullHandler) for handler in logger.handlers):
 
         logging.addLevelName(logging.NOTSET, "")
         logging.addLevelName(logging.DEBUG, "[D]")
@@ -82,4 +87,5 @@ def setup_logger():
 
     return logger
 
-denoise_logger = setup_logger()
+denoise_logger = logging.getLogger("denoise")
+denoise_logger.addHandler(logging.NullHandler())

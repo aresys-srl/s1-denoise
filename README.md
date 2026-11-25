@@ -120,7 +120,16 @@ try:
 except s1_denoise.DenoiseError as e:
     print(f"Processing failed: {e}")
 ```
- The log level is set by the Job Order in `run_job_order`; with `reconstruct_noise` it can be set through the standard `logging` module on the `"denoise"` logger. See the [API reference](https://opensource.aresys.it/s1-denoise/API/reference/) for details.
+
+Importing the package has no side effects: unlike the `denoise` command, it neither prints log messages nor creates `denoise.log`. The processor logs through the standard `logging` module on the `"denoise"` logger, so its messages follow the logging configuration of your application, e.g.:
+
+```python
+import logging
+
+logging.basicConfig(level=logging.INFO)
+```
+
+`run_job_order` sets the level of the `"denoise"` logger to the one of the Job Order. See the [API reference](https://opensource.aresys.it/s1-denoise/API/reference/) for details.
 
 ## Visualisation
 

@@ -64,3 +64,11 @@ denoise "/path/to/job/order.xml"
 
 > :lucide-circle-chevron-right: Refer to the [installation](install.md) and [user guide](user-guide/index.md) pages
 > for further information.
+
+## Acknowledgements
+
+The S1 L1N processor has been developed by [Aresys](https://www.aresys.it/) in the framework of the Copernicus Sentinel-1 SAR Mission Performance Cluster (SAR-MPC) service, under contract with the European Space Agency (ESA), as part of Evolution #25 of the MPC activities. The Copernicus programme is funded by the European Union.
+
+The views expressed in this repository and in its documentation can in no way be taken to reflect the official opinion of the European Union or of ESA.
+
+The figures in the documentation contain modified Copernicus Sentinel data processed by Aresys.

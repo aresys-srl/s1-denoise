@@ -14,7 +14,8 @@ repo_url = "https://github.com/aresys-srl/s1-denoise"
 repo_name = "aresys/s1-denoise"
 site_url = "https://opensource.aresys.it/s1-denoise/"
 copyright = """
-Copyright &copy; 2026-present Aresys s.r.l.
+Copyright &copy; 2026-present Aresys s.r.l.<br>
+Developed in the framework of the Copernicus Sentinel-1 SAR Mission Performance Cluster (SAR-MPC), under ESA contract.
 """
 
 # Zensical supports both implicit navigation and explicitly defined navigation.
